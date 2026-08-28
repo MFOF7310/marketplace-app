@@ -71,12 +71,23 @@ export default function App() {
   };
 
   const loadUserData = async (u) => {
-    if(!u) { setUserRole('buyer'); setMyVendor(null); return; }
+    if(!u) { setUserRole('buyer'); setMyVendor(null); setSellerProducts([]); return; }
     try {
-      const [role, vendor] = await Promise.all([getUserRole(u.id), getVendorByUserId(u.id)]);
+      const role = await getUserRole(u.id);
+      const vendor = await getVendorByUserId(u.id);
       setUserRole(role || 'buyer');
       setMyVendor(vendor || null);
-    } catch(e) { console.error(e); }
+      if(vendor) {
+        const [vProducts, vOrders, vAppts] = await Promise.all([
+          getProducts(vendor.id),
+          getOrdersByVendor(vendor.id),
+          getAppointmentsByVendor(vendor.id)
+        ]);
+        setSellerProducts(vProducts || []);
+        setOrders(vOrders || []);
+        setAppts(vAppts || []);
+      }
+    } catch(e) { console.error("loadUserData error:", e); }
   };
 
   useEffect(() => {
@@ -107,19 +118,12 @@ export default function App() {
   const [menuOpen,setMenuOpen] = useState(false);
   const [callModal,setCallModal] = useState(null);
   const [loginModal,setLoginModal] = useState(false);
-  const [sellerProducts,setSellerProducts] = useState(PRODUCTS.filter(p=>p.vendorId==="v1"));
+  const [sellerProducts,setSellerProducts] = useState([]);
   const [sellerTab,setSellerTab] = useState("catalogue");
   const [showAdd,setShowAdd] = useState(false);
-  const [newP,setNewP] = useState({title:"",price:"",type:"produit"});
-  const [orders,setOrders] = useState([
-    {id:1,client:"Awa K.",produit:"Robe wax",montant:35000,statut:"a_expedier"},
-    {id:2,client:"Jean-Marc D.",produit:"Retouche",montant:5000,statut:"a_expedier"},
-    {id:3,client:"Nadège P.",produit:"Robe wax",montant:35000,statut:"expediee"},
-  ]);
-  const [appts] = useState([
-    {id:1,client:"Marie C.",service:"Retouche express",date:"24 août",heure:"10:00"},
-    {id:2,client:"Fatoumata S.",service:"Essayage robe",date:"25 août",heure:"14:00"},
-  ]);
+  const [newP,setNewP] = useState({title:"",price:"",type:"produit",imageFile:null,uploading:false});
+  const [orders,setOrders] = useState([]);
+  const [appts,setAppts] = useState([]);
   const [favorites,setFavorites] = useState([]);
 
   const go = (s,id=null) => { setScreen(s); setScreenId(id); setMenuOpen(false); setBookDay(null); setBookSlot(null); window.scrollTo(0,0); };
@@ -655,19 +659,26 @@ export default function App() {
     );
     const addProduct = async () => {
       if(!newP.title||!newP.price||!me) return;
+      setNewP(p=>({...p,uploading:true}));
       try {
+        let image_url = null;
+        if(newP.imageFile) {
+          image_url = await uploadImage(newP.imageFile);
+        }
         const { createProduct } = await import('./api.js');
         const p = await createProduct({
           vendor_id: me.id,
           title: newP.title,
           price: Number(newP.price),
           type: newP.type,
+          image_url,
           available: true
         });
         setSellerProducts(prev=>[...prev, p]);
         await loadData();
-        setNewP({title:"",price:"",type:"produit"}); setShowAdd(false);
-      } catch(e) { console.error(e); alert("Erreur: " + e.message); }
+        setNewP({title:"",price:"",type:"produit",imageFile:null,uploading:false});
+        setShowAdd(false);
+      } catch(e) { console.error(e); alert("Erreur: " + e.message); setNewP(p=>({...p,uploading:false})); }
     };
     return (
       <div style={{paddingBottom:70}}>
@@ -708,11 +719,19 @@ export default function App() {
             ))}
             {showAdd
               ?<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:14,marginBottom:8}}>
-                <input style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontSize:14,color:T.text,outline:"none",marginBottom:8,boxSizing:"border-box"}} placeholder="Titre" value={newP.title} onChange={e=>setNewP({...newP,title:e.target.value})}/>
-                <input style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontSize:14,color:T.text,outline:"none",marginBottom:10,boxSizing:"border-box"}} placeholder="Prix FCFA" type="number" value={newP.price} onChange={e=>setNewP({...newP,price:e.target.value})}/>
-                <div style={{display:"flex",gap:8,marginBottom:12}}>
+                <input style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontSize:14,color:T.text,outline:"none",marginBottom:8,boxSizing:"border-box"}} placeholder="Titre du produit / service" defaultValue={newP.title} onBlur={e=>setNewP(p=>({...p,title:e.target.value}))}/>
+                <input style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontSize:14,color:T.text,outline:"none",marginBottom:8,boxSizing:"border-box"}} placeholder="Prix en FCFA" type="number" defaultValue={newP.price} onBlur={e=>setNewP(p=>({...p,price:e.target.value}))}/>
+                <div style={{display:"flex",gap:8,marginBottom:8}}>
                   {["produit","service"].map(t=><button key={t} style={{flex:1,background:newP.type===t?T.orange:T.tag,color:newP.type===t?"#fff":T.text,border:"none",borderRadius:8,padding:"10px",fontSize:14,fontWeight:600,cursor:"pointer"}} onClick={()=>setNewP({...newP,type:t})}>{t}</button>)}
                 </div>
+                <label style={{display:"flex",alignItems:"center",gap:10,background:T.bg,border:`1px dashed ${T.border}`,borderRadius:8,padding:"11px 12px",cursor:"pointer",marginBottom:12}}>
+                  <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>setNewP({...newP,imageFile:e.target.files?.[0]||null})}/>
+                  {newP.imageFile
+                    ?<><span style={{fontSize:18}}>🖼</span><span style={{fontSize:13,color:T.green,fontWeight:600}}>{newP.imageFile.name}</span></>
+                    :<><span style={{fontSize:18}}>📷</span><span style={{fontSize:13,color:T.sub}}>Ajouter une photo (optionnel)</span></>
+                  }
+                </label>
+                {newP.uploading&&<div style={{fontSize:12,color:T.orange,marginBottom:8,textAlign:"center"}}>Upload en cours...</div>}
                 <div style={{display:"flex",gap:8}}>
                   <button style={{flex:1,background:T.orange,color:"#fff",border:"none",borderRadius:8,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={addProduct}>Enregistrer</button>
                   <button style={{flex:1,background:T.tag,color:T.text,border:"none",borderRadius:8,padding:"12px",fontSize:14,cursor:"pointer"}} onClick={()=>setShowAdd(false)}>Annuler</button>
@@ -760,11 +779,33 @@ export default function App() {
     );
 
     if(done) return (
-      <div style={{padding:"60px 20px",textAlign:"center"}}>
-        <div style={{fontSize:40,marginBottom:12}}>✅</div>
-        <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:8}}>Demande envoyée !</div>
-        <p style={{color:T.sub,fontSize:14,marginBottom:20}}>L'équipe Woko va examiner votre dossier. Vous serez notifié par email.</p>
-        <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"12px 24px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={()=>go("home")}>Retour à l'accueil</button>
+      <div style={{minHeight:"100vh",background:T.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 24px",textAlign:"center"}}>
+        <div style={{background:T.card,borderRadius:24,padding:"40px 28px",maxWidth:400,width:"100%",boxShadow:"0 8px 32px rgba(0,0,0,0.08)"}}>
+          <div style={{width:80,height:80,borderRadius:"50%",background:"linear-gradient(135deg,#E65100,#FF8F00)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px",fontSize:36}}>
+            🏪
+          </div>
+          <div style={{fontSize:22,fontWeight:800,color:T.text,marginBottom:8}}>Demande envoyée !</div>
+          <div style={{width:48,height:3,background:T.orange,borderRadius:2,margin:"0 auto 16px"}}/>
+          <p style={{color:T.sub,fontSize:14,lineHeight:1.7,marginBottom:24}}>
+            Merci pour votre confiance. L'équipe <strong style={{color:T.orange}}>Woko</strong> va examiner votre dossier sous <strong>24 à 48 heures</strong>. Vous serez notifié par email dès validation.
+          </p>
+          <div style={{background:T.indigoBg,borderRadius:12,padding:"14px 16px",marginBottom:24,textAlign:"left"}}>
+            {[
+              {emoji:"📋",text:"Dossier en cours d'examen"},
+              {emoji:"✅",text:"Validation sous 24-48h"},
+              {emoji:"📧",text:"Notification par email"},
+              {emoji:"🏪",text:"Boutique activée immédiatement"},
+            ].map((s,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:i<3?10:0}}>
+                <span style={{fontSize:18}}>{s.emoji}</span>
+                <span style={{fontSize:13,color:T.text}}>{s.text}</span>
+              </div>
+            ))}
+          </div>
+          <button style={{width:"100%",background:T.orange,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={()=>go("home")}>
+            Retour à l'accueil
+          </button>
+        </div>
       </div>
     );
 
