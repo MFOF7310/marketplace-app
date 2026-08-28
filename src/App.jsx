@@ -528,8 +528,11 @@ export default function App() {
     return (
       <div style={{paddingBottom:70}}>
         <div style={{position:"relative"}}>
-          <Placeholder vendor={v} height={220} fontSize={48}/>
-          <button style={{position:"absolute",top:12,left:12,background:"rgba(0,0,0,0.4)",border:"none",borderRadius:"50%",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff"}} onClick={()=>go("home")}><ArrowLeft size={18}/></button>
+          {p.image_url
+            ?<img src={p.image_url} alt={p.title} style={{width:"100%",height:200,objectFit:"cover",display:"block"}} loading="lazy"/>
+            :<Placeholder vendor={v||{initials:"?",color:"#E65100"}} height={200} fontSize={48}/>
+          }
+          <button style={{position:"absolute",top:12,left:12,background:"rgba(0,0,0,0.5)",border:"none",borderRadius:"50%",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff",zIndex:10}} onClick={()=>go("home")}><ArrowLeft size={18}/></button>
           <button style={{position:"absolute",top:12,right:12,background:"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:isFav?"#E53935":T.muted}} onClick={()=>toggleFav(p.id)}><Heart size={18} fill={isFav?"#E53935":"none"}/></button>
           <div style={{position:"absolute",bottom:12,left:12,background:isService?"#1565C0":T.orange,color:"#fff",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700}}>{isService?"SERVICE":"PRODUIT"}</div>
         </div>
@@ -564,16 +567,19 @@ export default function App() {
 
   const VendorScreen = () => {
     const v=findV(screenId); if(!v) return null;
-    const vProducts=PRODUCTS.filter(p=>p.vendorId===v.id);
+    const vProducts=products.filter(p=>p.vendor_id===v.id||p.vendorId===v.id);
     return (
       <div style={{paddingBottom:70}}>
-        <div style={{background:v.color,padding:"14px 14px 50px"}}>
-          <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer",marginBottom:12}} onClick={()=>go("home")}><ArrowLeft size={20}/></button>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <div style={{width:64,height:64,borderRadius:"50%",background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:24,border:"3px solid rgba(255,255,255,0.5)"}}>{v.initials}</div>
+        <div style={{background:`linear-gradient(135deg,${v.color}EE,${v.color}99)`,padding:"0 0 50px",position:"relative"}}>
+          <div style={{display:"flex",alignItems:"center",padding:"12px 14px 16px",gap:12}}>
+            <button style={{background:"rgba(0,0,0,0.2)",border:"none",borderRadius:"50%",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff",flexShrink:0}} onClick={()=>go("home")}><ArrowLeft size={18}/></button>
+            {v.logo_url
+              ?<img src={v.logo_url} alt={v.name} style={{width:52,height:52,borderRadius:"50%",objectFit:"cover",border:"3px solid rgba(255,255,255,0.5)",flexShrink:0}}/>
+              :<div style={{width:52,height:52,borderRadius:"50%",background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:20,border:"3px solid rgba(255,255,255,0.5)",flexShrink:0}}>{v.initials||v.name?.[0]}</div>
+            }
             <div>
-              <div style={{color:"#fff",fontWeight:800,fontSize:20}}>{v.name}</div>
-              <div style={{color:"rgba(255,255,255,0.8)",fontSize:13}}>{v.zone}</div>
+              <div style={{color:"#fff",fontWeight:800,fontSize:18}}>{v.name}</div>
+              <div style={{color:"rgba(255,255,255,0.8)",fontSize:12}}>{v.city||v.zone||""}</div>
               {v.certified&&<div style={{display:"inline-flex",alignItems:"center",gap:4,background:"rgba(255,255,255,0.2)",color:"#fff",borderRadius:10,padding:"2px 8px",fontSize:10,fontWeight:700,marginTop:4}}><BadgeCheck size={10}/>CERTIFIÉ</div>}
             </div>
           </div>
