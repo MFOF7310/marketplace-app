@@ -81,7 +81,11 @@ export default function App() {
     setLoading(true);
     try {
       const [v, p] = await Promise.all([getVendors(), getProducts()]);
-      setVendors(v || []);
+      setVendors((v||[]).map(vendor=>({
+        ...vendor,
+        color: getVendorColor(vendor),
+        initials: vendor.initials || vendor.name?.[0]?.toUpperCase() || "?"
+      })));
       setProducts(p || []);
     } catch(e) { console.error(e); }
     setLoading(false);
@@ -162,24 +166,31 @@ export default function App() {
     if(fromSeller) return fromSeller;
     return null;
   };
+  const getVendorColor = (vendor) => {
+    if(!vendor) return "#E65100";
+    if(vendor.color) return vendor.color;
+    // Generate consistent color from name
+    const colors = ["#E65100","#1565C0","#2E7D32","#AD1457","#4527A0","#00695C","#F57F17","#6A1B9A"];
+    const idx = (vendor.name||"").charCodeAt(0) % colors.length;
+    return colors[idx];
+  };
+
   const findV = id => {
     if(!id) return null;
-    // Direct match
     const direct = vendors.find(v=>v.id===id);
-    if(direct) return direct;
+    if(direct) return {...direct, color: getVendorColor(direct), initials: direct.initials || direct.name?.[0]?.toUpperCase() || "?"};
     return null;
   };
 
   // Get vendor from product (handles both static and Supabase data)
   const getProductVendor = (p) => {
     if(!p) return null;
-    // Supabase nested vendor
-    if(p.vendors) return p.vendors;
-    // Direct vendor_id lookup
-    if(p.vendor_id) return findV(p.vendor_id);
-    // Legacy vendorId
-    if(p.vendorId) return findV(p.vendorId);
-    return null;
+    let v = null;
+    if(p.vendors) v = p.vendors;
+    else if(p.vendor_id) v = findV(p.vendor_id);
+    else if(p.vendorId) v = findV(p.vendorId);
+    if(!v) return null;
+    return {...v, color: getVendorColor(v), initials: v.initials || v.name?.[0]?.toUpperCase() || "?"};
   };
   const addCart = pid => setCart(prev => { const ex=prev.find(i=>i.pid===pid); return ex?prev.map(i=>i.pid===pid?{...i,qty:i.qty+1}:i):[...prev,{pid,qty:1}]; });
   const updQty = (pid,d) => setCart(prev=>prev.map(i=>i.pid===pid?{...i,qty:i.qty+d}:i).filter(i=>i.qty>0));
@@ -1442,11 +1453,21 @@ export default function App() {
   const Current = screens[screen]||HomeScreen;
 
   return (
-    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter','Segoe UI',sans-serif",width:"100%",maxWidth:600,margin:"0 auto",position:"relative",boxShadow:"0 0 40px rgba(0,0,0,0.1)"}}>
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter','Segoe UI',sans-serif",width:"100%",position:"relative"}}>
       <style>{`
-        * { box-sizing: border-box; }
-        html { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
-        body { overscroll-behavior: none; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body { 
+          -webkit-overflow-scrolling: touch;
+          width: 100%;
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior-y: none;
+        }
+        #root {
+          width: 100%;
+          min-height: 100vh;
+        }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes slideInLeft { from{transform:translateX(-100%)} to{transform:translateX(0)} }
         .screen-fade { animation: fadeIn 0.25s ease both; }
@@ -1455,6 +1476,14 @@ export default function App() {
         a { -webkit-tap-highlight-color: transparent; }
         ::-webkit-scrollbar { display: none; }
         * { -webkit-font-smoothing: antialiased; }
+        /* Desktop */
+        @media (min-width: 768px) {
+          #root > div { max-width: 480px; margin: 0 auto; box-shadow: 0 0 60px rgba(0,0,0,0.15); min-height: 100vh; }
+        }
+        /* Mobile full width */
+        @media (max-width: 767px) {
+          #root > div { width: 100% !important; max-width: 100% !important; }
+        }
       `}</style>
       <Header/>
       {menuOpen&&<SideMenu/>}
