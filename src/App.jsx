@@ -121,6 +121,7 @@ export default function App() {
   const [sellerProducts,setSellerProducts] = useState([]);
   const [sellerTab,setSellerTab] = useState("catalogue");
   const [showAdd,setShowAdd] = useState(false);
+  const [showEditVendor,setShowEditVendor] = useState(false);
   const [newP,setNewP] = useState({title:"",price:"",type:"produit",imageFile:null,uploading:false});
   const [orders,setOrders] = useState([]);
   const [appts,setAppts] = useState([]);
@@ -757,9 +758,63 @@ export default function App() {
     );
   };
 
+  const EditVendorForm = ({vendor, onSave}) => {
+    const [form, setForm] = useState({
+      name: vendor.name||"",
+      description: vendor.description||"",
+      phone: vendor.phone||"",
+      city: vendor.city||""
+    });
+    const [saving, setSaving] = useState(false);
+    const [logoFile, setLogoFile] = useState(null);
+
+    return (
+      <div style={{background:T.indigoBg,borderRadius:10,padding:14,border:`1px solid ${T.orange}`}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.orange,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+          <Pencil size={13}/> Complétez votre profil boutique — une seule fois
+        </div>
+        <div style={{fontSize:11,color:T.sub,marginBottom:12}}>
+          Modifiez les informations de votre boutique.
+        </div>
+        {[
+          {label:"Nom de la boutique",key:"name"},
+          {label:"Description",key:"description"},
+          {label:"Téléphone",key:"phone"},
+          {label:"Ville",key:"city"},
+        ].map(f=>(
+          <input key={f.key}
+            style={{width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"9px 12px",fontSize:13,color:T.text,outline:"none",marginBottom:8,boxSizing:"border-box"}}
+            placeholder={f.label}
+            defaultValue={form[f.key]}
+            onBlur={e=>setForm(p=>({...p,[f.key]:e.target.value}))}
+          />
+        ))}
+        <label style={{display:"flex",alignItems:"center",gap:10,background:T.card,border:`1px dashed ${T.border}`,borderRadius:8,padding:"9px 12px",cursor:"pointer",marginBottom:12}}>
+          <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>setLogoFile(e.target.files?.[0]||null)}/>
+          <span style={{color:T.orange,display:"flex"}}><Store size={16}/></span>
+          <span style={{fontSize:12,color:logoFile?T.green:T.sub}}>{logoFile?logoFile.name:"Logo de la boutique (optionnel)"}</span>
+        </label>
+        <button style={{width:"100%",background:saving?T.muted:T.orange,color:"#fff",border:"none",borderRadius:8,padding:"11px",fontSize:14,fontWeight:700,cursor:saving?"not-allowed":"pointer"}}
+          disabled={saving}
+          onClick={async()=>{
+            if(!form.name||!form.phone||!form.city){alert("Remplissez tous les champs obligatoires");return;}
+            setSaving(true);
+            try {
+              let logo_url = vendor.logo_url;
+              if(logoFile) logo_url = await uploadImage(logoFile);
+              await onSave({...form, logo_url});
+            } catch(e){alert("Erreur: "+e.message);}
+            setSaving(false);
+          }}>
+          {saving?"Enregistrement...":"Enregistrer définitivement"}
+        </button>
+      </div>
+    );
+  };
+
   const DashboardScreen = () => {
     const me = myVendor;
-    if(!me) return (
+    if(!me && !loading) return (
       <div style={{padding:20,textAlign:"center",paddingBottom:70}}>
         <div style={{fontSize:40,marginBottom:12}}>🏪</div>
         <div style={{fontSize:17,fontWeight:700,color:T.text,marginBottom:8}}>Vous n'avez pas encore de boutique</div>
@@ -767,6 +822,11 @@ export default function App() {
         <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"13px 24px",fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={()=>go("vendor-request")}>
           Demander la certification
         </button>
+      </div>
+    );
+    if(!me && loading) return (
+      <div style={{padding:60,textAlign:"center",color:T.sub}}>
+        <div style={{fontSize:14}}>Chargement de votre boutique...</div>
       </div>
     );
     const addProduct = async () => {
@@ -799,12 +859,30 @@ export default function App() {
           <div style={{color:"rgba(255,255,255,0.8)",fontSize:13}}>{me.name}</div>
         </div>
         <div style={{background:T.card,margin:12,borderRadius:10,padding:14,marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:52,height:52,borderRadius:"50%",background:me.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:18}}>{me.initials}</div>
-          <div>
-            <div style={{fontWeight:700,fontSize:16,color:T.text}}>{me.name}</div>
+          <div style={{width:52,height:52,borderRadius:"50%",background:me.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:18}}>{me.initials||me.name?.[0]}</div>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{fontWeight:700,fontSize:16,color:T.text}}>{me.name}</div>
+              <button style={{background:"none",border:"none",cursor:"pointer",color:T.orange,padding:2}} onClick={()=>setShowEditVendor(v=>!v)}>
+                <Pencil size={14}/>
+              </button>
+            </div>
+            <div style={{fontSize:12,color:T.sub,marginBottom:4}}>{me.city} · {me.phone}</div>
             <div style={{display:"inline-flex",alignItems:"center",gap:4,background:"#E3F2FD",color:"#1565C0",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}><BadgeCheck size={11}/>CERTIFIÉ</div>
           </div>
         </div>
+        {showEditVendor&&(
+          <div style={{marginTop:12,padding:"0 0 4px"}}>
+            <EditVendorForm vendor={me} onSave={async(data)=>{
+              try {
+                await supabase.from('vendors').update(data).eq('id',me.id);
+                setMyVendor({...me,...data});
+                setShowEditVendor(false);
+                await loadData();
+              } catch(e){alert("Erreur: "+e.message);}
+            }}/>
+          </div>
+        )}
         <div style={{display:"flex",background:T.card,borderBottom:`1px solid ${T.border}`,marginBottom:8}}>
           {["catalogue","commandes"].map(tab=>(
             <button key={tab} style={{flex:1,padding:"13px",background:"none",border:"none",borderBottom:`3px solid ${sellerTab===tab?T.orange:"transparent"}`,cursor:"pointer",fontSize:14,fontWeight:600,color:sellerTab===tab?T.orange:T.sub}} onClick={()=>setSellerTab(tab)}>
