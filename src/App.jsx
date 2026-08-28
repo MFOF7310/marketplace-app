@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase, SITE_URL } from './supabase.js'
+
 import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter } from "lucide-react";
 
 const LIGHT = { bg:"#F5F5F5",card:"#FFFFFF",border:"#E0E0E0",text:"#1A1A1A",sub:"#757575",orange:"#E65100",indigoBg:"#FFF3E0",green:"#2E7D32",greenBg:"#E8F5E9",muted:"#9E9E9E",headerTop:"#E65100",navBg:"#FFFFFF",sectionBg:"#FFFFFF",tag:"#F5F5F5" };
@@ -50,6 +52,17 @@ const Placeholder = ({vendor,height=160,fontSize=32}) => (
 export default function App() {
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const [dark,setDark] = useState(prefersDark);
+  const [user,setUser] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   const T = dark ? DARK : LIGHT;
   const [screen,setScreen] = useState("home");
   const [screenId,setScreenId] = useState(null);
@@ -123,7 +136,8 @@ export default function App() {
         <div style={{background:T.card,borderRadius:16,padding:28,width:"100%",maxWidth:400}} onClick={e=>e.stopPropagation()}>
           <h2 style={{color:T.text,marginBottom:8,fontSize:20}}>Se connecter</h2>
           <p style={{color:T.sub,fontSize:14,marginBottom:24}}>Créez un compte ou connectez-vous à Woko pour faire cette action.</p>
-          <button style={{width:"100%",background:"#DB4437",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          <button style={{width:"100%",background:"#DB4437",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}
+            onClick={async()=>{await supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:SITE_URL}})}}>
             <span style={{fontSize:18}}>G</span> Continuer avec Google
           </button>
           <button style={{width:"100%",background:"#1877F2",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
@@ -155,11 +169,16 @@ export default function App() {
         </div>
         <div style={{padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
           <div style={{padding:"4px 16px 8px",color:T.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Compte</div>
-          {[{icon:<User size={18}/>,label:"Se connecter"},{icon:<Plus size={18}/>,label:"Créer compte"},{icon:<PlusCircle size={18}/>,label:"Publier une annonce"}].map((item,i)=>(
-            <button key={i} style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);setLoginModal(true);}}>
-              <span style={{color:T.orange}}>{item.icon}</span>{item.label}
+          {user
+            ?<button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:"#E53935",fontSize:15}} onClick={async()=>{await supabase.auth.signOut();setMenuOpen(false);}}>
+              <span style={{color:"#E53935"}}><X size={18}/></span>Se déconnecter ({user.email?.split('@')[0]})
             </button>
-          ))}
+            :<>{[{icon:<User size={18}/>,label:"Se connecter"},{icon:<Plus size={18}/>,label:"Créer compte"},{icon:<PlusCircle size={18}/>,label:"Publier une annonce"}].map((item,i)=>(
+              <button key={i} style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);setLoginModal(true);}}>
+                <span style={{color:T.orange}}>{item.icon}</span>{item.label}
+              </button>
+            ))}</>
+          }
         </div>
         <div style={{padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
           <div style={{padding:"4px 16px 8px",color:T.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Espace</div>
@@ -195,7 +214,12 @@ export default function App() {
           <ShoppingCart size={22}/>
           {cartCount>0&&<span style={{position:"absolute",top:-2,right:-2,background:"#fff",color:T.orange,borderRadius:"50%",width:16,height:16,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800}}>{cartCount}</span>}
         </button>
-        <button style={{background:"none",border:"none",cursor:"pointer",color:"#fff",padding:4}} onClick={()=>setLoginModal(true)}><User size={22}/></button>
+        <button style={{background:"none",border:"none",cursor:"pointer",color:"#fff",padding:4}} onClick={()=>user?go("dashboard"):setLoginModal(true)}>
+          {user
+            ?<div style={{width:28,height:28,borderRadius:"50%",background:"rgba(255,255,255,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>{user.email?.[0].toUpperCase()}</div>
+            :<User size={22}/>
+          }
+        </button>
       </div>
     </div>
   );
