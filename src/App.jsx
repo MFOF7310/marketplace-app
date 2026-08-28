@@ -1,4 +1,13 @@
 import { useState, useEffect } from "react";
+
+// Register Service Worker
+if('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/market/sw.js')
+      .then(r => console.log('SW registered'))
+      .catch(e => console.log('SW failed:', e));
+  });
+}
 import { supabase, SITE_URL } from './supabase.js'
 import { getVendors, getProducts, getUserRole, getVendorByUserId, createProduct, deleteProduct, updateOrderStatus, getOrdersByVendor, getAppointmentsByVendor, uploadImage } from './api.js'
 
@@ -43,10 +52,18 @@ const DAYS = ["Lun 24","Mar 25","Mer 26","Jeu 27","Ven 28","Sam 29"];
 const SLOTS = ["09:00","10:00","11:00","14:00","15:00","16:00"];
 const SLOT_TAKEN = {};  // Will be loaded from DB
 
-const Placeholder = ({vendor,height=160,fontSize=32}) => (
-  <div style={{background:`linear-gradient(135deg,${vendor.color}CC,${vendor.color}44)`,height,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-    <div style={{fontSize,color:"white",fontWeight:800}}>{vendor.initials}</div>
-    <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",marginTop:4}}>Photo bientôt</div>
+const Placeholder = ({vendor,height=160,fontSize=32,title=""}) => (
+  <div style={{
+    background:`linear-gradient(135deg,${vendor?.color||"#E65100"}EE,${vendor?.color||"#E65100"}66)`,
+    height,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+    position:"relative",overflow:"hidden"
+  }}>
+    {/* Background pattern */}
+    <div style={{position:"absolute",inset:0,opacity:0.08,backgroundImage:`repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%)`,backgroundSize:"12px 12px"}}/>
+    <div style={{position:"relative",textAlign:"center"}}>
+      <div style={{fontSize,color:"white",fontWeight:800,letterSpacing:-1,textShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>{vendor?.initials||"?"}</div>
+      {title&&<div style={{fontSize:10,color:"rgba(255,255,255,0.8)",marginTop:4,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>}
+    </div>
   </div>
 );
 
@@ -105,8 +122,8 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
   const T = dark ? DARK : LIGHT;
-  const [screen,setScreen] = useState("home");
-  const [screenId,setScreenId] = useState(null);
+  const [screen,setScreen] = useState(()=>sessionStorage.getItem('woko-screen')||"home");
+  const [screenId,setScreenId] = useState(()=>sessionStorage.getItem('woko-screen-id')||null);
   const [role,setRole] = useState("buyer");
   const [cart,setCart] = useState([]);
   const [zone,setZone] = useState("centre");
@@ -121,12 +138,22 @@ export default function App() {
   const [sellerProducts,setSellerProducts] = useState([]);
   const [sellerTab,setSellerTab] = useState("catalogue");
   const [showAdd,setShowAdd] = useState(false);
+  const [showEditVendor,setShowEditVendor] = useState(false);
   const [newP,setNewP] = useState({title:"",price:"",type:"produit",imageFile:null,uploading:false});
   const [orders,setOrders] = useState([]);
   const [appts,setAppts] = useState([]);
   const [favorites,setFavorites] = useState([]);
 
-  const go = (s,id=null) => { setScreen(s); setScreenId(id); setMenuOpen(false); setBookDay(null); setBookSlot(null); window.scrollTo(0,0); };
+  const go = (s,id=null) => {
+    setScreen(s);
+    setScreenId(id);
+    setMenuOpen(false);
+    setBookDay(null);
+    setBookSlot(null);
+    window.scrollTo({top:0,behavior:'smooth'});
+    sessionStorage.setItem('woko-screen', s);
+    sessionStorage.setItem('woko-screen-id', id||'');
+  };
   const findP = id => {
     if(!id) return null;
     const fromProducts = products.find(p=>p.id===id);
@@ -227,7 +254,8 @@ export default function App() {
   const SideMenu = () => (
     <>
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200}} onClick={()=>setMenuOpen(false)}/>
-      <div style={{position:"fixed",top:0,left:0,bottom:0,width:280,background:T.card,zIndex:300,overflowY:"auto",boxShadow:"4px 0 20px rgba(0,0,0,0.2)"}}>
+      <div style={{position:"fixed",top:0,left:0,bottom:0,width:280,background:T.card,zIndex:300,overflowY:"auto",boxShadow:"4px 0 20px rgba(0,0,0,0.2)",animation:"slideInLeft 0.25s ease both"}}>
+        <style>{`@keyframes slideInLeft { from{transform:translateX(-100%);opacity:0} to{transform:translateX(0);opacity:1} }`}</style>
         <div style={{background:T.headerTop,padding:"20px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <span style={{color:"#fff",fontWeight:800,fontSize:20}}>🛍 Woko</span>
           <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer"}} onClick={()=>setMenuOpen(false)}><X size={20}/></button>
@@ -340,8 +368,8 @@ export default function App() {
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
         <div style={{position:"relative",cursor:"pointer"}} onClick={()=>go("product",p.id)}>
           {p.image_url
-            ? <img src={p.image_url} alt={p.title} style={{width:"100%",height:130,objectFit:"cover"}}/>
-            : <Placeholder vendor={v||{initials:"?",color:"#999"}} height={130} fontSize={28}/>
+            ? <img src={p.image_url} alt={p.title} style={{width:"100%",height:130,objectFit:"cover"}} loading="lazy"/>
+            : <Placeholder vendor={v||{initials:"?",color:"#E65100"}} height={130} fontSize={28} title={p.title}/>
           }
           <button style={{position:"absolute",top:8,right:8,background:"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:isFav?"#E53935":T.muted}} onClick={e=>{e.stopPropagation();toggleFav(p.id);}}>
             <Heart size={15} fill={isFav?"#E53935":"none"}/>
@@ -400,7 +428,10 @@ export default function App() {
             const v=getProductVendor(p);
             return (
               <div key={p.id} style={{flexShrink:0,width:160,background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",cursor:"pointer"}} onClick={()=>go("product",p.id)}>
-                <Placeholder vendor={v} height={110} fontSize={24}/>
+                {p.image_url
+                  ?<img src={p.image_url} alt={p.title} style={{width:"100%",height:110,objectFit:"cover"}} loading="lazy"/>
+                  :<Placeholder vendor={v||{initials:"?",color:"#E65100"}} height={110} fontSize={24} title={p.title}/>
+                }
                 <div style={{padding:"8px 10px"}}>
                   <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.3}}>{p.title}</div>
                   <div style={{fontSize:14,fontWeight:800,color:T.orange}}>{money(p.price)}</div>
@@ -423,8 +454,12 @@ export default function App() {
         <div style={{display:"flex",overflowX:"auto",gap:10,paddingLeft:12,paddingRight:12,scrollbarWidth:"none"}}>
           {vendors.map(v=>(
             <div key={v.id} style={{flexShrink:0,width:120,background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",cursor:"pointer",textAlign:"center"}} onClick={()=>go("vendor",v.id)}>
-              <div style={{background:`linear-gradient(135deg,${v.color}CC,${v.color}44)`,height:75,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <div style={{width:48,height:48,borderRadius:"50%",background:v.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:17,border:"3px solid rgba(255,255,255,0.4)"}}>{v.initials}</div>
+              <div style={{background:`linear-gradient(135deg,${v.color}CC,${v.color}44)`,height:75,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden"}}>
+                <div style={{position:"absolute",inset:0,opacity:0.06,backgroundImage:`repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%)`,backgroundSize:"10px 10px"}}/>
+                {v.logo_url
+                  ?<img src={v.logo_url} alt={v.name} style={{width:48,height:48,borderRadius:"50%",objectFit:"cover",border:"3px solid rgba(255,255,255,0.6)"}} loading="lazy"/>
+                  :<div style={{width:48,height:48,borderRadius:"50%",background:v.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:17,border:"3px solid rgba(255,255,255,0.4)",position:"relative"}}>{v.initials||v.name?.[0]}</div>
+                }
               </div>
               <div style={{padding:"8px 8px 10px"}}>
                 <div style={{fontSize:11,fontWeight:700,color:T.text,marginBottom:3}}>{v.name}</div>
@@ -747,9 +782,63 @@ export default function App() {
     );
   };
 
+  const EditVendorForm = ({vendor, onSave}) => {
+    const [form, setForm] = useState({
+      name: vendor.name||"",
+      description: vendor.description||"",
+      phone: vendor.phone||"",
+      city: vendor.city||""
+    });
+    const [saving, setSaving] = useState(false);
+    const [logoFile, setLogoFile] = useState(null);
+
+    return (
+      <div style={{background:T.indigoBg,borderRadius:10,padding:14,border:`1px solid ${T.orange}`}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.orange,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+          <Pencil size={13}/> Complétez votre profil boutique — une seule fois
+        </div>
+        <div style={{fontSize:11,color:T.sub,marginBottom:12}}>
+          Modifiez les informations de votre boutique.
+        </div>
+        {[
+          {label:"Nom de la boutique",key:"name"},
+          {label:"Description",key:"description"},
+          {label:"Téléphone",key:"phone"},
+          {label:"Ville",key:"city"},
+        ].map(f=>(
+          <input key={f.key}
+            style={{width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"9px 12px",fontSize:13,color:T.text,outline:"none",marginBottom:8,boxSizing:"border-box"}}
+            placeholder={f.label}
+            defaultValue={form[f.key]}
+            onBlur={e=>setForm(p=>({...p,[f.key]:e.target.value}))}
+          />
+        ))}
+        <label style={{display:"flex",alignItems:"center",gap:10,background:T.card,border:`1px dashed ${T.border}`,borderRadius:8,padding:"9px 12px",cursor:"pointer",marginBottom:12}}>
+          <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>setLogoFile(e.target.files?.[0]||null)}/>
+          <span style={{color:T.orange,display:"flex"}}><Store size={16}/></span>
+          <span style={{fontSize:12,color:logoFile?T.green:T.sub}}>{logoFile?logoFile.name:"Logo de la boutique (optionnel)"}</span>
+        </label>
+        <button style={{width:"100%",background:saving?T.muted:T.orange,color:"#fff",border:"none",borderRadius:8,padding:"11px",fontSize:14,fontWeight:700,cursor:saving?"not-allowed":"pointer"}}
+          disabled={saving}
+          onClick={async()=>{
+            if(!form.name||!form.phone||!form.city){alert("Remplissez tous les champs obligatoires");return;}
+            setSaving(true);
+            try {
+              let logo_url = vendor.logo_url;
+              if(logoFile) logo_url = await uploadImage(logoFile);
+              await onSave({...form, logo_url});
+            } catch(e){alert("Erreur: "+e.message);}
+            setSaving(false);
+          }}>
+          {saving?"Enregistrement...":"Enregistrer définitivement"}
+        </button>
+      </div>
+    );
+  };
+
   const DashboardScreen = () => {
     const me = myVendor;
-    if(!me) return (
+    if(!me && !loading) return (
       <div style={{padding:20,textAlign:"center",paddingBottom:70}}>
         <div style={{fontSize:40,marginBottom:12}}>🏪</div>
         <div style={{fontSize:17,fontWeight:700,color:T.text,marginBottom:8}}>Vous n'avez pas encore de boutique</div>
@@ -757,6 +846,11 @@ export default function App() {
         <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"13px 24px",fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={()=>go("vendor-request")}>
           Demander la certification
         </button>
+      </div>
+    );
+    if(!me && loading) return (
+      <div style={{padding:60,textAlign:"center",color:T.sub}}>
+        <div style={{fontSize:14}}>Chargement de votre boutique...</div>
       </div>
     );
     const addProduct = async () => {
@@ -789,12 +883,30 @@ export default function App() {
           <div style={{color:"rgba(255,255,255,0.8)",fontSize:13}}>{me.name}</div>
         </div>
         <div style={{background:T.card,margin:12,borderRadius:10,padding:14,marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:52,height:52,borderRadius:"50%",background:me.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:18}}>{me.initials}</div>
-          <div>
-            <div style={{fontWeight:700,fontSize:16,color:T.text}}>{me.name}</div>
+          <div style={{width:52,height:52,borderRadius:"50%",background:me.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:18}}>{me.initials||me.name?.[0]}</div>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{fontWeight:700,fontSize:16,color:T.text}}>{me.name}</div>
+              <button style={{background:"none",border:"none",cursor:"pointer",color:T.orange,padding:2}} onClick={()=>setShowEditVendor(v=>!v)}>
+                <Pencil size={14}/>
+              </button>
+            </div>
+            <div style={{fontSize:12,color:T.sub,marginBottom:4}}>{me.city} · {me.phone}</div>
             <div style={{display:"inline-flex",alignItems:"center",gap:4,background:"#E3F2FD",color:"#1565C0",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}><BadgeCheck size={11}/>CERTIFIÉ</div>
           </div>
         </div>
+        {showEditVendor&&(
+          <div style={{marginTop:12,padding:"0 0 4px"}}>
+            <EditVendorForm vendor={me} onSave={async(data)=>{
+              try {
+                await supabase.from('vendors').update(data).eq('id',me.id);
+                setMyVendor({...me,...data});
+                setShowEditVendor(false);
+                await loadData();
+              } catch(e){alert("Erreur: "+e.message);}
+            }}/>
+          </div>
+        )}
         <div style={{display:"flex",background:T.card,borderBottom:`1px solid ${T.border}`,marginBottom:8}}>
           {["catalogue","commandes"].map(tab=>(
             <button key={tab} style={{flex:1,padding:"13px",background:"none",border:"none",borderBottom:`3px solid ${sellerTab===tab?T.orange:"transparent"}`,cursor:"pointer",fontSize:14,fontWeight:600,color:sellerTab===tab?T.orange:T.sub}} onClick={()=>setSellerTab(tab)}>
@@ -1330,15 +1442,19 @@ export default function App() {
   const Current = screens[screen]||HomeScreen;
 
   return (
-    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter','Segoe UI',sans-serif",width:"100%",position:"relative"}}>
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter','Segoe UI',sans-serif",width:"100%",maxWidth:600,margin:"0 auto",position:"relative",boxShadow:"0 0 40px rgba(0,0,0,0.1)"}}>
       <style>{`
         * { box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
+        html { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        body { overscroll-behavior: none; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes slideInLeft { from{transform:translateX(-100%)} to{transform:translateX(0)} }
         .screen-fade { animation: fadeIn 0.25s ease both; }
-        button { transition: opacity 0.15s, transform 0.1s; }
+        button { transition: opacity 0.15s, transform 0.1s; -webkit-tap-highlight-color: transparent; }
         button:active { opacity: 0.75; transform: scale(0.97); }
+        a { -webkit-tap-highlight-color: transparent; }
         ::-webkit-scrollbar { display: none; }
+        * { -webkit-font-smoothing: antialiased; }
       `}</style>
       <Header/>
       {menuOpen&&<SideMenu/>}
