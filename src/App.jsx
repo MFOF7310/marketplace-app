@@ -1,4 +1,13 @@
 import { useState, useEffect } from "react";
+
+// Register Service Worker
+if('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/market/sw.js')
+      .then(r => console.log('SW registered'))
+      .catch(e => console.log('SW failed:', e));
+  });
+}
 import { supabase, SITE_URL } from './supabase.js'
 import { getVendors, getProducts, getUserRole, getVendorByUserId, createProduct, deleteProduct, updateOrderStatus, getOrdersByVendor, getAppointmentsByVendor, uploadImage } from './api.js'
 
