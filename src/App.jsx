@@ -105,8 +105,8 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
   const T = dark ? DARK : LIGHT;
-  const [screen,setScreen] = useState("home");
-  const [screenId,setScreenId] = useState(null);
+  const [screen,setScreen] = useState(()=>sessionStorage.getItem('woko-screen')||"home");
+  const [screenId,setScreenId] = useState(()=>sessionStorage.getItem('woko-screen-id')||null);
   const [role,setRole] = useState("buyer");
   const [cart,setCart] = useState([]);
   const [zone,setZone] = useState("centre");
@@ -126,7 +126,16 @@ export default function App() {
   const [appts,setAppts] = useState([]);
   const [favorites,setFavorites] = useState([]);
 
-  const go = (s,id=null) => { setScreen(s); setScreenId(id); setMenuOpen(false); setBookDay(null); setBookSlot(null); window.scrollTo(0,0); };
+  const go = (s,id=null) => {
+    setScreen(s);
+    setScreenId(id);
+    setMenuOpen(false);
+    setBookDay(null);
+    setBookSlot(null);
+    window.scrollTo({top:0,behavior:'smooth'});
+    sessionStorage.setItem('woko-screen', s);
+    sessionStorage.setItem('woko-screen-id', id||'');
+  };
   const findP = id => {
     if(!id) return null;
     const fromProducts = products.find(p=>p.id===id);
@@ -227,7 +236,8 @@ export default function App() {
   const SideMenu = () => (
     <>
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200}} onClick={()=>setMenuOpen(false)}/>
-      <div style={{position:"fixed",top:0,left:0,bottom:0,width:280,background:T.card,zIndex:300,overflowY:"auto",boxShadow:"4px 0 20px rgba(0,0,0,0.2)"}}>
+      <div style={{position:"fixed",top:0,left:0,bottom:0,width:280,background:T.card,zIndex:300,overflowY:"auto",boxShadow:"4px 0 20px rgba(0,0,0,0.2)",animation:"slideInLeft 0.25s ease both"}}>
+        <style>{`@keyframes slideInLeft { from{transform:translateX(-100%);opacity:0} to{transform:translateX(0);opacity:1} }`}</style>
         <div style={{background:T.headerTop,padding:"20px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <span style={{color:"#fff",fontWeight:800,fontSize:20}}>🛍 Woko</span>
           <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer"}} onClick={()=>setMenuOpen(false)}><X size={20}/></button>
@@ -1333,12 +1343,16 @@ export default function App() {
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter','Segoe UI',sans-serif",width:"100%",position:"relative"}}>
       <style>{`
         * { box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
+        html { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        body { overscroll-behavior: none; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes slideInLeft { from{transform:translateX(-100%)} to{transform:translateX(0)} }
         .screen-fade { animation: fadeIn 0.25s ease both; }
-        button { transition: opacity 0.15s, transform 0.1s; }
+        button { transition: opacity 0.15s, transform 0.1s; -webkit-tap-highlight-color: transparent; }
         button:active { opacity: 0.75; transform: scale(0.97); }
+        a { -webkit-tap-highlight-color: transparent; }
         ::-webkit-scrollbar { display: none; }
+        * { -webkit-font-smoothing: antialiased; }
       `}</style>
       <Header/>
       {menuOpen&&<SideMenu/>}
