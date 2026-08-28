@@ -735,7 +735,11 @@ export default function App() {
               })}
             </div>
           </>}
-          <button style={{width:"100%",background:bookDay&&bookSlot?T.orange:T.muted,color:"#fff",border:"none",borderRadius:10,padding:14,fontSize:16,fontWeight:700,cursor:bookDay&&bookSlot?"pointer":"not-allowed"}} onClick={()=>bookDay&&bookSlot&&setConfirmed(true)}>
+          <button style={{width:"100%",background:bookDay&&bookSlot?T.orange:T.muted,color:"#fff",border:"none",borderRadius:10,padding:14,fontSize:16,fontWeight:700,cursor:bookDay&&bookSlot?"pointer":"not-allowed"}}
+            onClick={()=>{
+              if(!bookDay||!bookSlot) return;
+              setConfirmed(true);
+            }}>
             {bookDay&&bookSlot?"Confirmer le rendez-vous":"Sélectionnez date et créneau"}
           </button>
         </div>
@@ -938,7 +942,15 @@ export default function App() {
         } catch(e) { console.warn("Email notification failed:", e); }
 
         setDone(true);
-      } catch(e) { alert("Erreur: " + e.message); }
+      } catch(e) {
+        if(e.message?.includes('one_pending_per_user')) {
+          alert("Vous avez déjà une demande en cours d'examen. L'équipe Woko vous contactera sous 24-48h.");
+        } else if(e.message?.includes('one_vendor_per_user')) {
+          alert("Vous avez déjà une boutique active sur Woko.");
+        } else {
+          alert("Erreur: " + e.message);
+        }
+      }
       setSubmitting(false);
     };
 

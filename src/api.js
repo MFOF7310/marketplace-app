@@ -148,13 +148,20 @@ export const getAppointmentsByVendor = async (vendorId) => {
 
 // ── USER ROLES ──
 export const getUserRole = async (userId) => {
-  const { data, error } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', userId)
-    .single()
-  if (error && error.code !== 'PGRST116') throw error
-  return data?.role || 'buyer'
+  try {
+    const { data, error } = await supabase.rpc('get_my_role')
+    if (error) throw error
+    return data || 'buyer'
+  } catch(e) {
+    // Fallback to direct query
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .single()
+    if (error && error.code !== 'PGRST116') return 'buyer'
+    return data?.role || 'buyer'
+  }
 }
 
 export const setUserRole = async (userId, role) => {
