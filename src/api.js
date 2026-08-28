@@ -148,19 +148,26 @@ export const getAppointmentsByVendor = async (vendorId) => {
 
 // ── USER ROLES ──
 export const getUserRole = async (userId) => {
-  const { data, error } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', userId)
-    .single()
-  if (error && error.code !== 'PGRST116') throw error
-  return data?.role || 'buyer'
+  try {
+    const { data, error } = await supabase.rpc('get_my_role')
+    if (error) throw error
+    return data || 'buyer'
+  } catch(e) {
+    // Fallback to direct query
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .single()
+    if (error && error.code !== 'PGRST116') return 'buyer'
+    return data?.role || 'buyer'
+  }
 }
 
 export const setUserRole = async (userId, role) => {
   const { data, error } = await supabase
     .from('user_roles')
-    .upsert({ user_id: userId, role })
+    .upsert({ user_id: userId, role }, { onConflict: 'user_id' })
     .select()
     .single()
   if (error) throw error
@@ -188,6 +195,15 @@ export const getVendorRequests = async () => {
 }
 
 export const reviewVendorRequest = async (id, status, reviewerId) => {
+  // First get the request data
+  const { data: requestData, error: fetchError } = await supabase
+    .from('vendor_requests')
+    .select('*')
+    .eq('id', id)
+    .single()
+  if (fetchError) throw fetchError
+
+  // Update status
   const { data, error } = await supabase
     .from('vendor_requests')
     .update({ status, reviewed_by: reviewerId, reviewed_at: new Date().toISOString() })
@@ -198,36 +214,49 @@ export const reviewVendorRequest = async (id, status, reviewerId) => {
 
   // Si approuvé, créer le vendor et mettre à jour le rôle
   if (status === 'approved') {
-    const request = data
-    await supabase.from('vendors').insert({
-      user_id: request.user_id,
-      name: request.shop_name,
-      description: request.description,
-      phone: request.phone,
-      city: request.city,
-      certified: true
-    })
-    await setUserRole(request.user_id, 'vendor')
+    // Check if vendor already exists
+    const { data: existing } = await supabase
+      .from('vendors')
+      .select('id')
+      .eq('user_id', requestData.user_id)
+      .single()
+    
+    if (!existing) {
+      await supabase.from('vendors').insert({
+        user_id: requestData.user_id,
+        name: requestData.shop_name,
+        description: requestData.description,
+        phone: requestData.phone,
+        city: requestData.city,
+        certified: true
+      })
+    }
+    await setUserRole(requestData.user_id, 'vendor')
   }
   return data
 }
 
 // ── ADMIN ──
 export const getAllUsers = async () => {
-  const { data, error } = await supabase
-    .from('user_roles')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.rpc('get_all_user_roles')
   if (error) throw error
   return data
 }
 
 export const getPendingRequests = async () => {
-  const { data, error } = await supabase
-    .from('vendor_requests')
-    .select('*')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.rpc('get_pending_requests')
+  if (error) throw error
+  return data
+}
+
+export const getAdminStats = async () => {
+  const { data, error } = await supabase.rpc('get_admin_stats')
+  if (error) throw error
+  return data
+}
+
+export const getAllVendorsAdmin = async () => {
+  const { data, error } = await supabase.rpc('get_all_vendors')
   if (error) throw error
   return data
 }

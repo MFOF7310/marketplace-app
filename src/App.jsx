@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase, SITE_URL } from './supabase.js'
 import { getVendors, getProducts, getUserRole, getVendorByUserId, createProduct, deleteProduct, updateOrderStatus, getOrdersByVendor, getAppointmentsByVendor, uploadImage } from './api.js'
 
-import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame } from "lucide-react";
+import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame, Bell, Settings, Lock, FileText } from "lucide-react";
 
 const LIGHT = { bg:"#F5F5F5",card:"#FFFFFF",border:"#E0E0E0",text:"#1A1A1A",sub:"#757575",orange:"#E65100",indigoBg:"#FFF3E0",green:"#2E7D32",greenBg:"#E8F5E9",muted:"#9E9E9E",headerTop:"#E65100",navBg:"#FFFFFF",sectionBg:"#FFFFFF",tag:"#F5F5F5" };
 const DARK  = { bg:"#121212",card:"#1E1E1E",border:"#2C2C2C",text:"#F0F0F0",sub:"#9E9E9E",orange:"#FF7043",indigoBg:"#2C1810",green:"#66BB6A",greenBg:"#1B5E2033",muted:"#616161",headerTop:"#BF360C",navBg:"#1A1A1A",sectionBg:"#1E1E1E",tag:"#2A2A2A" };
@@ -41,7 +41,7 @@ const ZONES = [{id:"centre",label:"Bamako Centre",fee:500},{id:"peripherie",labe
 const PAYMENTS = [{id:"orange",label:"Orange Money",color:"#FF6600"},{id:"moov",label:"Moov Money",color:"#0057B8"},{id:"wave",label:"Wave",color:"#1DC9E0"}];
 const DAYS = ["Lun 24","Mar 25","Mer 26","Jeu 27","Ven 28","Sam 29"];
 const SLOTS = ["09:00","10:00","11:00","14:00","15:00","16:00"];
-const SLOT_TAKEN = {"Lun 24-09:00":true,"Mar 25-15:00":true};
+const SLOT_TAKEN = {};  // Will be loaded from DB
 
 const Placeholder = ({vendor,height=160,fontSize=32}) => (
   <div style={{background:`linear-gradient(135deg,${vendor.color}CC,${vendor.color}44)`,height,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
@@ -71,12 +71,23 @@ export default function App() {
   };
 
   const loadUserData = async (u) => {
-    if(!u) { setUserRole('buyer'); setMyVendor(null); return; }
+    if(!u) { setUserRole('buyer'); setMyVendor(null); setSellerProducts([]); return; }
     try {
-      const [role, vendor] = await Promise.all([getUserRole(u.id), getVendorByUserId(u.id)]);
+      const role = await getUserRole(u.id);
+      const vendor = await getVendorByUserId(u.id);
       setUserRole(role || 'buyer');
       setMyVendor(vendor || null);
-    } catch(e) { console.error(e); }
+      if(vendor) {
+        const [vProducts, vOrders, vAppts] = await Promise.all([
+          getProducts(vendor.id),
+          getOrdersByVendor(vendor.id),
+          getAppointmentsByVendor(vendor.id)
+        ]);
+        setSellerProducts(vProducts || []);
+        setOrders(vOrders || []);
+        setAppts(vAppts || []);
+      }
+    } catch(e) { console.error("loadUserData error:", e); }
   };
 
   useEffect(() => {
@@ -107,24 +118,42 @@ export default function App() {
   const [menuOpen,setMenuOpen] = useState(false);
   const [callModal,setCallModal] = useState(null);
   const [loginModal,setLoginModal] = useState(false);
-  const [sellerProducts,setSellerProducts] = useState(PRODUCTS.filter(p=>p.vendorId==="v1"));
+  const [sellerProducts,setSellerProducts] = useState([]);
   const [sellerTab,setSellerTab] = useState("catalogue");
   const [showAdd,setShowAdd] = useState(false);
-  const [newP,setNewP] = useState({title:"",price:"",type:"produit"});
-  const [orders,setOrders] = useState([
-    {id:1,client:"Awa K.",produit:"Robe wax",montant:35000,statut:"a_expedier"},
-    {id:2,client:"Jean-Marc D.",produit:"Retouche",montant:5000,statut:"a_expedier"},
-    {id:3,client:"Nadège P.",produit:"Robe wax",montant:35000,statut:"expediee"},
-  ]);
-  const [appts] = useState([
-    {id:1,client:"Marie C.",service:"Retouche express",date:"24 août",heure:"10:00"},
-    {id:2,client:"Fatoumata S.",service:"Essayage robe",date:"25 août",heure:"14:00"},
-  ]);
+  const [newP,setNewP] = useState({title:"",price:"",type:"produit",imageFile:null,uploading:false});
+  const [orders,setOrders] = useState([]);
+  const [appts,setAppts] = useState([]);
   const [favorites,setFavorites] = useState([]);
 
   const go = (s,id=null) => { setScreen(s); setScreenId(id); setMenuOpen(false); setBookDay(null); setBookSlot(null); window.scrollTo(0,0); };
-  const findP = id => products.find(p=>p.id===id) || sellerProducts.find(p=>p.id===id);
-  const findV = id => vendors.find(v=>v.id===id);
+  const findP = id => {
+    if(!id) return null;
+    const fromProducts = products.find(p=>p.id===id);
+    if(fromProducts) return fromProducts;
+    const fromSeller = sellerProducts.find(p=>p.id===id);
+    if(fromSeller) return fromSeller;
+    return null;
+  };
+  const findV = id => {
+    if(!id) return null;
+    // Direct match
+    const direct = vendors.find(v=>v.id===id);
+    if(direct) return direct;
+    return null;
+  };
+
+  // Get vendor from product (handles both static and Supabase data)
+  const getProductVendor = (p) => {
+    if(!p) return null;
+    // Supabase nested vendor
+    if(p.vendors) return p.vendors;
+    // Direct vendor_id lookup
+    if(p.vendor_id) return findV(p.vendor_id);
+    // Legacy vendorId
+    if(p.vendorId) return findV(p.vendorId);
+    return null;
+  };
   const addCart = pid => setCart(prev => { const ex=prev.find(i=>i.pid===pid); return ex?prev.map(i=>i.pid===pid?{...i,qty:i.qty+1}:i):[...prev,{pid,qty:1}]; });
   const updQty = (pid,d) => setCart(prev=>prev.map(i=>i.pid===pid?{...i,qty:i.qty+d}:i).filter(i=>i.qty>0));
   const remCart = pid => setCart(prev=>prev.filter(i=>i.pid!==pid));
@@ -142,7 +171,7 @@ export default function App() {
 
   const CallModal = () => {
     if(!callModal) return null;
-    const v = findV(callModal);
+    const v = findV(callModal) || vendors.find(v=>v.id===callModal);
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setCallModal(null)}>
         <div style={{background:T.card,borderRadius:"16px 16px 0 0",padding:"24px 20px 40px",width:"100%",maxWidth:500}} onClick={e=>e.stopPropagation()}>
@@ -154,9 +183,10 @@ export default function App() {
             <a href={`tel:${v?.phone}`} style={{flex:1,background:T.orange,color:"#fff",border:"none",borderRadius:25,padding:"13px",fontSize:14,fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
               <Phone size={16}/> Appeler
             </a>
-            <button style={{flex:1,background:T.indigoBg,color:T.orange,border:`1px solid ${T.orange}`,borderRadius:25,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-              <MessageCircle size={16}/> Message
-            </button>
+            <a href={`https://wa.me/${v?.phone?.replace(/[^0-9]/g,"")}`} target="_blank" rel="noreferrer"
+              style={{flex:1,background:"#25D366",color:"#fff",border:"none",borderRadius:25,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,textDecoration:"none"}}>
+              <MessageCircle size={16}/> WhatsApp
+            </a>
           </div>
           <div style={{textAlign:"center",color:T.sub,fontSize:13}}>{v?.phone}</div>
         </div>
@@ -216,7 +246,7 @@ export default function App() {
           <div style={{padding:"4px 16px 8px",color:T.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Compte</div>
           {user
             ? <button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);go("profile");}}>
-                <span style={{color:T.orange}}><User size={18}/></span>Mon profil ({user.user_metadata?.full_name || user.email?.split("@")[0]})
+                <span style={{color:T.orange}}><User size={18}/></span>Mon profil
               </button>
             : <>
                 <button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);setLoginModal(true);}}>
@@ -303,7 +333,7 @@ export default function App() {
   };
 
   const ProductCard = ({p}) => {
-    const v = findV(p.vendor_id || p.vendorId);
+    const v = getProductVendor(p);
     const isService = p.type==="service";
     const isFav = favorites.includes(p.id);
     return (
@@ -326,7 +356,7 @@ export default function App() {
           <div style={{fontSize:11,color:T.sub,display:"flex",alignItems:"center",gap:4,marginBottom:8}}><MapPin size={10}/>{v.zone}</div>
         </div>
         <div style={{display:"flex",borderTop:`1px solid ${T.border}`}}>
-          <button style={{flex:1,padding:"9px 8px",background:"none",border:"none",borderRight:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.orange,fontSize:13,fontWeight:600}} onClick={()=>setCallModal(p.vendorId)}>
+          <button style={{flex:1,padding:"9px 8px",background:"none",border:"none",borderRight:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.orange,fontSize:13,fontWeight:600}} onClick={()=>setCallModal(p.vendor_id||p.vendorId)}>
             <Phone size={14}/> Appeler
           </button>
           <button style={{flex:1,padding:"9px 8px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.sub,fontSize:13}} onClick={()=>{isService?go("booking",p.id):addCart(p.id);}}>
@@ -367,7 +397,7 @@ export default function App() {
         </div>
         <div style={{display:"flex",overflowX:"auto",gap:10,paddingLeft:12,paddingRight:12,scrollbarWidth:"none"}}>
           {products.filter(p=>p.featured).map(p=>{
-            const v=findV(p.vendorId);
+            const v=getProductVendor(p);
             return (
               <div key={p.id} style={{flexShrink:0,width:160,background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",cursor:"pointer"}} onClick={()=>go("product",p.id)}>
                 <Placeholder vendor={v} height={110} fontSize={24}/>
@@ -448,7 +478,7 @@ export default function App() {
     const p = findP(screenId);
     const [added,setAdded] = useState(false);
     if(!p) return null;
-    const v=findV(p.vendorId); const isService=p.type==="service"; const isFav=favorites.includes(p.id);
+    const v=getProductVendor(p); const isService=p.type==="service"; const isFav=favorites.includes(p.id);
     return (
       <div style={{paddingBottom:70}}>
         <div style={{position:"relative"}}>
@@ -462,7 +492,7 @@ export default function App() {
           <div style={{fontSize:24,fontWeight:800,color:T.orange,marginBottom:8}}>{money(p.price)}</div>
           <div style={{fontSize:13,color:T.sub,display:"flex",alignItems:"center",gap:6}}><MapPin size={13}/>{v.zone}</div>
         </div>
-        <div style={{background:T.card,padding:"14px",marginBottom:8,cursor:"pointer"}} onClick={()=>go("vendor",v.id)}>
+        <div style={{background:T.card,padding:"14px",marginBottom:8,cursor:"pointer"}} onClick={()=>v&&go("vendor",v.id)}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={{width:52,height:52,borderRadius:"50%",background:v.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:18,flexShrink:0}}>{v.initials}</div>
             <div style={{flex:1}}>
@@ -474,7 +504,7 @@ export default function App() {
           </div>
         </div>
         <div style={{padding:"0 14px 14px",display:"flex",gap:10,background:T.card}}>
-          <button style={{flex:1,background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setCallModal(p.vendorId)}><Phone size={16}/>Appeler</button>
+          <button style={{flex:1,background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setCallModal(p.vendor_id||p.vendorId)}><Phone size={16}/>Appeler</button>
           {isService
             ?<button style={{flex:1,background:"#1565C0",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>go("booking",p.id)}><CalendarDays size={16}/>Réserver</button>
             :<button style={{flex:1,background:added?"#2E7D32":T.indigoBg,color:added?"#fff":T.orange,border:`1px solid ${T.orange}`,borderRadius:10,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{addCart(p.id);setAdded(true);setTimeout(()=>setAdded(false),1500);}}>
@@ -592,9 +622,86 @@ export default function App() {
     );
   };
 
+  const CalendarPicker = ({selectedDay, onSelect, T}) => {
+    const today = new Date();
+    const [month, setMonth] = useState(today.getMonth());
+    const [year, setYear] = useState(today.getFullYear());
+
+    const monthNames = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+    const dayNames = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+
+    const prevMonth = () => {
+      if(month===0){setMonth(11);setYear(y=>y-1);}
+      else setMonth(m=>m-1);
+    };
+    const nextMonth = () => {
+      if(month===11){setMonth(0);setYear(y=>y+1);}
+      else setMonth(m=>m+1);
+    };
+
+    const formatDay = (d) => `${String(d).padStart(2,"0")}/${String(month+1).padStart(2,"0")}/${year}`;
+    const isPast = (d) => new Date(year,month,d) < new Date(today.getFullYear(),today.getMonth(),today.getDate());
+
+    return (
+      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:12,marginBottom:8}}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <button style={{background:T.tag,border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:16,color:T.text}} onClick={prevMonth}>‹</button>
+          <span style={{fontWeight:700,fontSize:14,color:T.text}}>{monthNames[month]} {year}</span>
+          <button style={{background:T.tag,border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:16,color:T.text}} onClick={nextMonth}>›</button>
+        </div>
+        {/* Day names */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+          {dayNames.map(d=>(
+            <div key={d} style={{textAlign:"center",fontSize:10,color:T.muted,fontWeight:600,padding:"2px 0"}}>{d}</div>
+          ))}
+        </div>
+        {/* Days grid */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+          {Array(firstDay).fill(null).map((_,i)=>(
+            <div key={"e"+i}/>
+          ))}
+          {Array(daysInMonth).fill(null).map((_,i)=>{
+            const d = i+1;
+            const key = formatDay(d);
+            const past = isPast(d);
+            const selected = selectedDay===key;
+            const isToday = d===today.getDate()&&month===today.getMonth()&&year===today.getFullYear();
+            return (
+              <button key={d} disabled={past}
+                style={{
+                  background:selected?T.orange:isToday?T.indigoBg:"transparent",
+                  color:selected?"#fff":past?T.muted:isToday?T.orange:T.text,
+                  border:`1px solid ${selected?T.orange:isToday?T.orange:"transparent"}`,
+                  borderRadius:8,padding:"6px 2px",cursor:past?"not-allowed":"pointer",
+                  fontSize:13,fontWeight:selected||isToday?700:400,
+                  opacity:past?0.4:1,
+                }}
+                onClick={()=>!past&&onSelect(key)}>
+                {d}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const BookingScreen = () => {
-    const p=findP(screenId); const [confirmed,setConfirmed]=useState(false); if(!p) return null;
-    const v=findV(p.vendorId);
+    const p=findP(screenId);
+    const [confirmed,setConfirmed]=useState(false);
+    if(!p) return (
+      <div style={{padding:20,textAlign:"center",paddingTop:60}}>
+        <div style={{fontSize:40,marginBottom:12}}>📅</div>
+        <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:8}}>Chargement du service...</div>
+        <div style={{fontSize:13,color:T.sub,marginBottom:20}}>ID: {screenId}</div>
+        <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"12px 24px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={()=>go("home")}>Retour</button>
+      </div>
+    );
+    const v=getProductVendor(p) || {name:'Vendeur',zone:'',phone:''};
     if(confirmed) return (
       <div style={{padding:"60px 20px",textAlign:"center"}}>
         <div style={{width:64,height:64,borderRadius:"50%",background:"#E8F5E9",color:"#2E7D32",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><CheckCircle2 size={32}/></div>
@@ -617,13 +724,8 @@ export default function App() {
             <div style={{fontSize:20,fontWeight:800,color:T.orange,marginTop:6}}>{money(p.price)}</div>
           </div>
           <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:10}}>Choisir une date</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
-            {DAYS.map(d=>(
-              <button key={d} style={{background:bookDay===d?T.orange:T.card,color:bookDay===d?"#fff":T.text,border:`1px solid ${bookDay===d?T.orange:T.border}`,borderRadius:8,padding:"10px 4px",cursor:"pointer",fontSize:13,fontWeight:600}} onClick={()=>{setBookDay(d);setBookSlot(null);}}>
-                {d}
-              </button>
-            ))}
-          </div>
+          <CalendarPicker selectedDay={bookDay} onSelect={(d)=>{setBookDay(d);setBookSlot(null);}} T={T}/>
+          <div style={{marginBottom:16}}/>
           {bookDay&&<>
             <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:10}}>Choisir un créneau</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:20}}>
@@ -633,7 +735,11 @@ export default function App() {
               })}
             </div>
           </>}
-          <button style={{width:"100%",background:bookDay&&bookSlot?T.orange:T.muted,color:"#fff",border:"none",borderRadius:10,padding:14,fontSize:16,fontWeight:700,cursor:bookDay&&bookSlot?"pointer":"not-allowed"}} onClick={()=>bookDay&&bookSlot&&setConfirmed(true)}>
+          <button style={{width:"100%",background:bookDay&&bookSlot?T.orange:T.muted,color:"#fff",border:"none",borderRadius:10,padding:14,fontSize:16,fontWeight:700,cursor:bookDay&&bookSlot?"pointer":"not-allowed"}}
+            onClick={()=>{
+              if(!bookDay||!bookSlot) return;
+              setConfirmed(true);
+            }}>
             {bookDay&&bookSlot?"Confirmer le rendez-vous":"Sélectionnez date et créneau"}
           </button>
         </div>
@@ -655,19 +761,26 @@ export default function App() {
     );
     const addProduct = async () => {
       if(!newP.title||!newP.price||!me) return;
+      setNewP(p=>({...p,uploading:true}));
       try {
+        let image_url = null;
+        if(newP.imageFile) {
+          image_url = await uploadImage(newP.imageFile);
+        }
         const { createProduct } = await import('./api.js');
         const p = await createProduct({
           vendor_id: me.id,
           title: newP.title,
           price: Number(newP.price),
           type: newP.type,
+          image_url,
           available: true
         });
         setSellerProducts(prev=>[...prev, p]);
         await loadData();
-        setNewP({title:"",price:"",type:"produit"}); setShowAdd(false);
-      } catch(e) { console.error(e); alert("Erreur: " + e.message); }
+        setNewP({title:"",price:"",type:"produit",imageFile:null,uploading:false});
+        setShowAdd(false);
+      } catch(e) { console.error(e); alert("Erreur: " + e.message); setNewP(p=>({...p,uploading:false})); }
     };
     return (
       <div style={{paddingBottom:70}}>
@@ -708,11 +821,19 @@ export default function App() {
             ))}
             {showAdd
               ?<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:14,marginBottom:8}}>
-                <input style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontSize:14,color:T.text,outline:"none",marginBottom:8,boxSizing:"border-box"}} placeholder="Titre" value={newP.title} onChange={e=>setNewP({...newP,title:e.target.value})}/>
-                <input style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontSize:14,color:T.text,outline:"none",marginBottom:10,boxSizing:"border-box"}} placeholder="Prix FCFA" type="number" value={newP.price} onChange={e=>setNewP({...newP,price:e.target.value})}/>
-                <div style={{display:"flex",gap:8,marginBottom:12}}>
+                <input style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontSize:14,color:T.text,outline:"none",marginBottom:8,boxSizing:"border-box"}} placeholder="Titre du produit / service" defaultValue={newP.title} onBlur={e=>setNewP(p=>({...p,title:e.target.value}))}/>
+                <input style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontSize:14,color:T.text,outline:"none",marginBottom:8,boxSizing:"border-box"}} placeholder="Prix en FCFA" type="number" defaultValue={newP.price} onBlur={e=>setNewP(p=>({...p,price:e.target.value}))}/>
+                <div style={{display:"flex",gap:8,marginBottom:8}}>
                   {["produit","service"].map(t=><button key={t} style={{flex:1,background:newP.type===t?T.orange:T.tag,color:newP.type===t?"#fff":T.text,border:"none",borderRadius:8,padding:"10px",fontSize:14,fontWeight:600,cursor:"pointer"}} onClick={()=>setNewP({...newP,type:t})}>{t}</button>)}
                 </div>
+                <label style={{display:"flex",alignItems:"center",gap:10,background:T.bg,border:`1px dashed ${T.border}`,borderRadius:8,padding:"11px 12px",cursor:"pointer",marginBottom:12}}>
+                  <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>setNewP({...newP,imageFile:e.target.files?.[0]||null})}/>
+                  {newP.imageFile
+                    ?<><span style={{fontSize:18}}>🖼</span><span style={{fontSize:13,color:T.green,fontWeight:600}}>{newP.imageFile.name}</span></>
+                    :<><span style={{fontSize:18}}>📷</span><span style={{fontSize:13,color:T.sub}}>Ajouter une photo (optionnel)</span></>
+                  }
+                </label>
+                {newP.uploading&&<div style={{fontSize:12,color:T.orange,marginBottom:8,textAlign:"center"}}>Upload en cours...</div>}
                 <div style={{display:"flex",gap:8}}>
                   <button style={{flex:1,background:T.orange,color:"#fff",border:"none",borderRadius:8,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={addProduct}>Enregistrer</button>
                   <button style={{flex:1,background:T.tag,color:T.text,border:"none",borderRadius:8,padding:"12px",fontSize:14,cursor:"pointer"}} onClick={()=>setShowAdd(false)}>Annuler</button>
@@ -760,11 +881,33 @@ export default function App() {
     );
 
     if(done) return (
-      <div style={{padding:"60px 20px",textAlign:"center"}}>
-        <div style={{fontSize:40,marginBottom:12}}>✅</div>
-        <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:8}}>Demande envoyée !</div>
-        <p style={{color:T.sub,fontSize:14,marginBottom:20}}>L'équipe Woko va examiner votre dossier. Vous serez notifié par email.</p>
-        <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"12px 24px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={()=>go("home")}>Retour à l'accueil</button>
+      <div style={{minHeight:"100vh",background:T.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 24px",textAlign:"center"}}>
+        <div style={{background:T.card,borderRadius:24,padding:"40px 28px",maxWidth:400,width:"100%",boxShadow:"0 8px 32px rgba(0,0,0,0.08)"}}>
+          <div style={{width:80,height:80,borderRadius:"50%",background:"linear-gradient(135deg,#E65100,#FF8F00)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px",fontSize:36}}>
+            🏪
+          </div>
+          <div style={{fontSize:22,fontWeight:800,color:T.text,marginBottom:8}}>Demande envoyée !</div>
+          <div style={{width:48,height:3,background:T.orange,borderRadius:2,margin:"0 auto 16px"}}/>
+          <p style={{color:T.sub,fontSize:14,lineHeight:1.7,marginBottom:24}}>
+            Merci pour votre confiance. L'équipe <strong style={{color:T.orange}}>Woko</strong> va examiner votre dossier sous <strong>24 à 48 heures</strong>. Vous serez notifié par email dès validation.
+          </p>
+          <div style={{background:T.indigoBg,borderRadius:12,padding:"14px 16px",marginBottom:24,textAlign:"left"}}>
+            {[
+              {emoji:"📋",text:"Dossier en cours d'examen"},
+              {emoji:"✅",text:"Validation sous 24-48h"},
+              {emoji:"📧",text:"Notification par email"},
+              {emoji:"🏪",text:"Boutique activée immédiatement"},
+            ].map((s,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:i<3?10:0}}>
+                <span style={{fontSize:18}}>{s.emoji}</span>
+                <span style={{fontSize:13,color:T.text}}>{s.text}</span>
+              </div>
+            ))}
+          </div>
+          <button style={{width:"100%",background:T.orange,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={()=>go("home")}>
+            Retour à l'accueil
+          </button>
+        </div>
       </div>
     );
 
@@ -799,7 +942,15 @@ export default function App() {
         } catch(e) { console.warn("Email notification failed:", e); }
 
         setDone(true);
-      } catch(e) { alert("Erreur: " + e.message); }
+      } catch(e) {
+        if(e.message?.includes('one_pending_per_user')) {
+          alert("Vous avez déjà une demande en cours d'examen. L'équipe Woko vous contactera sous 24-48h.");
+        } else if(e.message?.includes('one_vendor_per_user')) {
+          alert("Vous avez déjà une boutique active sur Woko.");
+        } else {
+          alert("Erreur: " + e.message);
+        }
+      }
       setSubmitting(false);
     };
 
@@ -848,15 +999,32 @@ export default function App() {
   };
 
   const AdminScreen = () => {
+    const [adminTab, setAdminTab] = useState("requests");
     const [requests, setRequests] = useState([]);
+    const [allVendors, setAllVendors] = useState([]);
+    const [allUsers, setAllUsers] = useState([]);
+    const [stats, setStats] = useState({vendors:0,products:0,requests:0,users:0});
     const [loadingReq, setLoadingReq] = useState(true);
 
     useEffect(()=>{
       const load = async () => {
         try {
-          const { getPendingRequests } = await import('./api.js');
-          const data = await getPendingRequests();
-          setRequests(data||[]);
+          const { getPendingRequests, getAllUsers, getAdminStats, getAllVendorsAdmin } = await import('./api.js');
+          const [reqs, users, vs, stats] = await Promise.all([
+            getPendingRequests(),
+            getAllUsers(),
+            getAllVendorsAdmin(),
+            getAdminStats()
+          ]);
+          setRequests(reqs||[]);
+          setAllUsers(users||[]);
+          setAllVendors(vs||[]);
+          setStats({
+            vendors: stats?.vendors||0,
+            products: stats?.products||0,
+            requests: stats?.pending_requests||0,
+            users: stats?.users||0
+          });
         } catch(e){ console.error(e); }
         setLoadingReq(false);
       };
@@ -873,50 +1041,162 @@ export default function App() {
         await reviewVendorRequest(id, status, user.id);
         setRequests(prev=>prev.filter(r=>r.id!==id));
         await loadData();
+        if(status==="approved") setStats(s=>({...s,vendors:s.vendors+1,requests:s.requests-1}));
+        else setStats(s=>({...s,requests:s.requests-1}));
       } catch(e){ alert("Erreur: "+e.message); }
     };
+
+    const handleToggleCert = async (vendorId, current) => {
+      try {
+        await supabase.from('vendors').update({certified:!current}).eq('id',vendorId);
+        setAllVendors(prev=>prev.map(v=>v.id===vendorId?{...v,certified:!current}:v));
+        await loadData();
+      } catch(e){ alert("Erreur: "+e.message); }
+    };
+
+    const handleSetRole = async (userId, role) => {
+      if(!window.confirm(`Définir ce rôle: ${role} ?`)) return;
+      try {
+        const { setUserRole } = await import('./api.js');
+        await setUserRole(userId, role);
+        setAllUsers(prev=>prev.map(u=>u.user_id===userId?{...u,role}:u));
+      } catch(e){ alert("Erreur: "+e.message); }
+    };
+
+    const StatCard = ({emoji,label,value,color}) => (
+      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 10px",textAlign:"center",flex:1}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:6}}>{emoji}</div>
+        <div style={{fontSize:22,fontWeight:800,color:color||T.orange}}>{value}</div>
+        <div style={{fontSize:11,color:T.sub}}>{label}</div>
+      </div>
+    );
 
     return (
       <div style={{paddingBottom:70}}>
         <div style={{background:T.headerTop,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
           <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer"}} onClick={()=>go("home")}><ArrowLeft size={20}/></button>
           <span style={{color:"#fff",fontWeight:700,fontSize:17}}>Panel Admin</span>
-          <span style={{background:"rgba(255,255,255,0.2)",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{userRole.toUpperCase()}</span>
+          <span style={{background:"rgba(255,255,255,0.2)",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700,marginLeft:"auto"}}>{userRole.toUpperCase()}</span>
         </div>
-        <div style={{padding:16}}>
-          <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:12}}>
-            Demandes de certification ({requests.length})
-          </div>
-          {loadingReq
-            ?<div style={{textAlign:"center",padding:20,color:T.sub}}>Chargement...</div>
-            :requests.length===0
-            ?<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:20,textAlign:"center",color:T.sub}}>
-              Aucune demande en attente 🎉
-            </div>
-            :requests.map(r=>(
-              <div key={r.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14,marginBottom:10}}>
-                <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>{r.shop_name}</div>
-                <div style={{fontSize:13,color:T.sub,marginBottom:4}}>📍 {r.city} · 📞 {r.phone}</div>
-                {r.description&&<div style={{fontSize:13,color:T.sub,marginBottom:8}}>{r.description}</div>}
-                {r.id_document_url&&(
-                  <a href={r.id_document_url} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,color:T.orange,fontSize:13,marginBottom:10}}>
-                    📄 Voir la pièce d'identité
-                  </a>
-                )}
-                <div style={{fontSize:11,color:T.muted,marginBottom:10}}>Soumis le {new Date(r.created_at).toLocaleDateString("fr-FR")}</div>
-                <div style={{display:"flex",gap:8}}>
-                  <button style={{flex:1,background:"#E8F5E9",color:"#2E7D32",border:"none",borderRadius:8,padding:"10px",fontSize:14,fontWeight:700,cursor:"pointer"}}
-                    onClick={()=>handleReview(r.id,"approved")}>
-                    ✅ Approuver
-                  </button>
-                  <button style={{flex:1,background:"#FFEBEE",color:"#E53935",border:"none",borderRadius:8,padding:"10px",fontSize:14,fontWeight:700,cursor:"pointer"}}
-                    onClick={()=>handleReview(r.id,"rejected")}>
-                    ❌ Rejeter
+
+        {/* Stats */}
+        <div style={{display:"flex",gap:8,padding:"12px 12px 0"}}>
+          <StatCard emoji={<Store size={22} color={T.orange}/>} label="Boutiques" value={stats.vendors}/>
+          <StatCard emoji={<ShoppingCart size={22} color={T.orange}/>} label="Produits" value={stats.products}/>
+          <StatCard emoji={<Clock size={22} color="#E53935"/>} label="En attente" value={stats.requests} color="#E53935"/>
+          <StatCard emoji={<User size={22} color={T.orange}/>} label="Utilisateurs" value={stats.users}/>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",background:T.card,borderBottom:`1px solid ${T.border}`,margin:"12px 0 0",overflowX:"auto"}}>
+          {[
+            {id:"requests",label:`Demandes (${stats.requests})`},
+            {id:"vendors",label:"Boutiques"},
+            ...(userRole==="owner"?[{id:"users",label:"Utilisateurs"}]:[]),
+          ].map(tab=>(
+            <button key={tab.id} style={{flex:1,padding:"12px 8px",background:"none",border:"none",borderBottom:`3px solid ${adminTab===tab.id?T.orange:"transparent"}`,cursor:"pointer",fontSize:13,fontWeight:600,color:adminTab===tab.id?T.orange:T.sub,whiteSpace:"nowrap"}}
+              onClick={()=>setAdminTab(tab.id)}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{padding:"12px 12px"}}>
+          {/* REQUESTS TAB */}
+          {adminTab==="requests"&&(
+            loadingReq
+              ?<div style={{textAlign:"center",padding:20,color:T.sub}}>Chargement...</div>
+              :requests.length===0
+              ?<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:24,textAlign:"center"}}>
+                <div style={{fontSize:32,marginBottom:8}}>🎉</div>
+                <div style={{color:T.sub}}>Aucune demande en attente</div>
+              </div>
+              :requests.map(r=>(
+                <div key={r.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14,marginBottom:10}}>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>{r.shop_name}</div>
+                  <div style={{fontSize:13,color:T.sub,marginBottom:4}}>📍 {r.city} · 📞 {r.phone}</div>
+                  {r.description&&<div style={{fontSize:13,color:T.sub,marginBottom:6}}>{r.description}</div>}
+                  {r.id_document_url&&(
+                    <a href={r.id_document_url} target="_blank" rel="noreferrer"
+                      style={{display:"inline-flex",alignItems:"center",gap:6,color:T.orange,fontSize:13,marginBottom:10,textDecoration:"none"}}>
+                      📄 Voir pièce d'identité
+                    </a>
+                  )}
+                  <div style={{fontSize:11,color:T.muted,marginBottom:10}}>
+                    Soumis le {new Date(r.created_at).toLocaleDateString("fr-FR")}
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button style={{flex:1,background:"#E8F5E9",color:"#2E7D32",border:"none",borderRadius:8,padding:"10px",fontSize:14,fontWeight:700,cursor:"pointer"}}
+                      onClick={()=>handleReview(r.id,"approved")}>✅ Approuver</button>
+                    <button style={{flex:1,background:"#FFEBEE",color:"#E53935",border:"none",borderRadius:8,padding:"10px",fontSize:14,fontWeight:700,cursor:"pointer"}}
+                      onClick={()=>handleReview(r.id,"rejected")}>❌ Rejeter</button>
+                  </div>
+                </div>
+              ))
+          )}
+
+          {/* VENDORS TAB */}
+          {adminTab==="vendors"&&(
+            allVendors.length===0
+              ?<div style={{textAlign:"center",padding:20,color:T.sub}}>Aucune boutique</div>
+              :allVendors.map(v=>(
+                <div key={v.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:12,marginBottom:8,display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:44,height:44,borderRadius:"50%",background:T.orange,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:16,flexShrink:0}}>
+                    {v.name?.[0]?.toUpperCase()||"?"}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text}}>{v.name}</div>
+                    <div style={{fontSize:12,color:T.sub}}>📍 {v.city||"N/A"} · 📞 {v.phone||"N/A"}</div>
+                  </div>
+                  <button
+                    style={{background:v.certified?"#E8F5E9":"#FFEBEE",color:v.certified?"#2E7D32":"#E53935",border:"none",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}
+                    onClick={()=>handleToggleCert(v.id,v.certified)}>
+                    {v.certified?"✅ Certifié":"❌ Non certifié"}
                   </button>
                 </div>
-              </div>
-            ))
-          }
+              ))
+          )}
+
+          {/* USERS TAB - owner only */}
+          {adminTab==="users"&&userRole==="owner"&&(
+            allUsers.length===0
+              ?<div style={{textAlign:"center",padding:20,color:T.sub}}>Aucun utilisateur</div>
+              :allUsers.map(u=>(
+                <div key={u.user_id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:12,marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                    <div style={{width:36,height:36,borderRadius:"50%",background:T.orange,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:14}}>
+                      {u.user_id?.[0]?.toUpperCase()||"?"}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,color:T.text,fontWeight:600}}>{u.user_id?.slice(0,8)}...</div>
+                      <div style={{fontSize:11,color:T.sub}}>Inscrit le {new Date(u.created_at).toLocaleDateString("fr-FR")}</div>
+                    </div>
+                    <span style={{background:
+                      u.role==="owner"?"#FFF3E0":
+                      u.role==="admin"?"#E8EAF6":
+                      u.role==="vendor"?"#E8F5E9":"#F5F5F5",
+                      color:
+                      u.role==="owner"?T.orange:
+                      u.role==="admin"?"#3949AB":
+                      u.role==="vendor"?"#2E7D32":"#757575",
+                      borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700}}>
+                      {u.role?.toUpperCase()}
+                    </span>
+                  </div>
+                  {u.user_id!==user?.id&&(
+                    <div style={{display:"flex",gap:6}}>
+                      {["buyer","vendor","admin"].map(role=>(
+                        <button key={role}
+                          style={{flex:1,background:u.role===role?T.indigoBg:T.tag,color:u.role===role?T.orange:T.sub,border:`1px solid ${u.role===role?T.orange:T.border}`,borderRadius:6,padding:"6px 4px",fontSize:11,fontWeight:600,cursor:"pointer"}}
+                          onClick={()=>handleSetRole(u.user_id,role)}>
+                          {role}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
+          )}
         </div>
       </div>
     );
@@ -969,16 +1249,16 @@ export default function App() {
             </div>
           </div>
           {[
-            {emoji:"🏪",label:"Mon espace vendeur",action:()=>go("dashboard"),delay:"0.1s"},
-            {emoji:"📦",label:"Mes commandes",action:()=>{},delay:"0.15s"},
-            {emoji:"❤️",label:"Mes favoris",action:()=>{},delay:"0.2s"},
-            {emoji:"🔔",label:"Notifications",action:()=>{},delay:"0.25s"},
-            {emoji:"📄",label:"Conditions d'utilisation",action:()=>go("tos"),delay:"0.3s"},
-            {emoji:"🔒",label:"Politique de confidentialité",action:()=>go("privacy"),delay:"0.35s"},
-            ...(userRole==="admin"||userRole==="owner"?[{emoji:"⚙️",label:"Panel Admin",action:()=>go("admin"),delay:"0.4s"}]:[]),
+            {icon:<Store size={20}/>,label:"Mon espace vendeur",action:()=>go("dashboard"),delay:"0.1s"},
+            {icon:<ShoppingCart size={20}/>,label:"Mes commandes",action:()=>{},delay:"0.15s"},
+            {icon:<Heart size={20}/>,label:"Mes favoris",action:()=>{},delay:"0.2s"},
+            {icon:<Bell size={20}/>,label:"Notifications",action:()=>{},delay:"0.25s"},
+            {icon:<FileText size={20}/>,label:"Conditions d'utilisation",action:()=>go("tos"),delay:"0.3s"},
+            {icon:<Lock size={20}/>,label:"Politique de confidentialité",action:()=>go("privacy"),delay:"0.35s"},
+            ...(userRole==="admin"||userRole==="owner"?[{icon:<Settings size={20}/>,label:"Panel Admin",action:()=>go("admin"),delay:"0.4s"}]:[]),
           ].map((item,i)=>(
             <button key={i} className="slide-item" style={{display:"flex",alignItems:"center",gap:14,width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px",marginBottom:8,cursor:"pointer",color:T.text,fontSize:15,fontWeight:500,textAlign:"left",animationDelay:item.delay}} onClick={item.action}>
-              <span style={{fontSize:22}}>{item.emoji}</span>
+              <span style={{color:T.orange,display:"flex"}}>{item.icon}</span>
               <span style={{flex:1}}>{item.label}</span>
               <ChevronRight size={16} color={T.muted}/>
             </button>
