@@ -238,20 +238,25 @@ export const reviewVendorRequest = async (id, status, reviewerId) => {
 
 // ── ADMIN ──
 export const getAllUsers = async () => {
-  const { data, error } = await supabase
-    .from('user_roles')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.rpc('get_all_user_roles')
   if (error) throw error
   return data
 }
 
 export const getPendingRequests = async () => {
-  const { data, error } = await supabase
-    .from('vendor_requests')
-    .select('*')
-    .eq('status', 'pending')
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.rpc('get_pending_requests')
+  if (error) throw error
+  return data
+}
+
+export const getAdminStats = async () => {
+  const { data, error } = await supabase.rpc('get_admin_stats')
+  if (error) throw error
+  return data
+}
+
+export const getAllVendorsAdmin = async () => {
+  const { data, error } = await supabase.rpc('get_all_vendors')
   if (error) throw error
   return data
 }

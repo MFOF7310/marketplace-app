@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase, SITE_URL } from './supabase.js'
 import { getVendors, getProducts, getUserRole, getVendorByUserId, createProduct, deleteProduct, updateOrderStatus, getOrdersByVendor, getAppointmentsByVendor, uploadImage } from './api.js'
 
-import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame } from "lucide-react";
+import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame, Bell, Settings, Lock, FileText } from "lucide-react";
 
 const LIGHT = { bg:"#F5F5F5",card:"#FFFFFF",border:"#E0E0E0",text:"#1A1A1A",sub:"#757575",orange:"#E65100",indigoBg:"#FFF3E0",green:"#2E7D32",greenBg:"#E8F5E9",muted:"#9E9E9E",headerTop:"#E65100",navBg:"#FFFFFF",sectionBg:"#FFFFFF",tag:"#F5F5F5" };
 const DARK  = { bg:"#121212",card:"#1E1E1E",border:"#2C2C2C",text:"#F0F0F0",sub:"#9E9E9E",orange:"#FF7043",indigoBg:"#2C1810",green:"#66BB6A",greenBg:"#1B5E2033",muted:"#616161",headerTop:"#BF360C",navBg:"#1A1A1A",sectionBg:"#1E1E1E",tag:"#2A2A2A" };
@@ -246,7 +246,7 @@ export default function App() {
           <div style={{padding:"4px 16px 8px",color:T.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Compte</div>
           {user
             ? <button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);go("profile");}}>
-                <span style={{color:T.orange}}><User size={18}/></span>Mon profil ({user.user_metadata?.full_name || user.email?.split("@")[0]})
+                <span style={{color:T.orange}}><User size={18}/></span>Mon profil
               </button>
             : <>
                 <button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);setLoginModal(true);}}>
@@ -1009,21 +1009,21 @@ export default function App() {
     useEffect(()=>{
       const load = async () => {
         try {
-          const { getPendingRequests, getAllUsers } = await import('./api.js');
-          const [reqs, users, vs, ps] = await Promise.all([
+          const { getPendingRequests, getAllUsers, getAdminStats, getAllVendorsAdmin } = await import('./api.js');
+          const [reqs, users, vs, stats] = await Promise.all([
             getPendingRequests(),
             getAllUsers(),
-            supabase.from('vendors').select('*').order('created_at',{ascending:false}),
-            supabase.from('products').select('*',{count:'exact',head:true})
+            getAllVendorsAdmin(),
+            getAdminStats()
           ]);
           setRequests(reqs||[]);
           setAllUsers(users||[]);
-          setAllVendors(vs.data||[]);
+          setAllVendors(vs||[]);
           setStats({
-            vendors: vs.data?.length||0,
-            products: ps.count||0,
-            requests: reqs?.length||0,
-            users: users?.length||0
+            vendors: stats?.vendors||0,
+            products: stats?.products||0,
+            requests: stats?.pending_requests||0,
+            users: stats?.users||0
           });
         } catch(e){ console.error(e); }
         setLoadingReq(false);
@@ -1065,7 +1065,7 @@ export default function App() {
 
     const StatCard = ({emoji,label,value,color}) => (
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 10px",textAlign:"center",flex:1}}>
-        <div style={{fontSize:24,marginBottom:4}}>{emoji}</div>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:6}}>{emoji}</div>
         <div style={{fontSize:22,fontWeight:800,color:color||T.orange}}>{value}</div>
         <div style={{fontSize:11,color:T.sub}}>{label}</div>
       </div>
@@ -1081,10 +1081,10 @@ export default function App() {
 
         {/* Stats */}
         <div style={{display:"flex",gap:8,padding:"12px 12px 0"}}>
-          <StatCard emoji="🏪" label="Boutiques" value={stats.vendors}/>
-          <StatCard emoji="📦" label="Produits" value={stats.products}/>
-          <StatCard emoji="⏳" label="En attente" value={stats.requests} color="#E53935"/>
-          <StatCard emoji="👥" label="Utilisateurs" value={stats.users}/>
+          <StatCard emoji={<Store size={22} color={T.orange}/>} label="Boutiques" value={stats.vendors}/>
+          <StatCard emoji={<ShoppingCart size={22} color={T.orange}/>} label="Produits" value={stats.products}/>
+          <StatCard emoji={<Clock size={22} color="#E53935"/>} label="En attente" value={stats.requests} color="#E53935"/>
+          <StatCard emoji={<User size={22} color={T.orange}/>} label="Utilisateurs" value={stats.users}/>
         </div>
 
         {/* Tabs */}
@@ -1249,16 +1249,16 @@ export default function App() {
             </div>
           </div>
           {[
-            {emoji:"🏪",label:"Mon espace vendeur",action:()=>go("dashboard"),delay:"0.1s"},
-            {emoji:"📦",label:"Mes commandes",action:()=>{},delay:"0.15s"},
-            {emoji:"❤️",label:"Mes favoris",action:()=>{},delay:"0.2s"},
-            {emoji:"🔔",label:"Notifications",action:()=>{},delay:"0.25s"},
-            {emoji:"📄",label:"Conditions d'utilisation",action:()=>go("tos"),delay:"0.3s"},
-            {emoji:"🔒",label:"Politique de confidentialité",action:()=>go("privacy"),delay:"0.35s"},
-            ...(userRole==="admin"||userRole==="owner"?[{emoji:"⚙️",label:"Panel Admin",action:()=>go("admin"),delay:"0.4s"}]:[]),
+            {icon:<Store size={20}/>,label:"Mon espace vendeur",action:()=>go("dashboard"),delay:"0.1s"},
+            {icon:<ShoppingCart size={20}/>,label:"Mes commandes",action:()=>{},delay:"0.15s"},
+            {icon:<Heart size={20}/>,label:"Mes favoris",action:()=>{},delay:"0.2s"},
+            {icon:<Bell size={20}/>,label:"Notifications",action:()=>{},delay:"0.25s"},
+            {icon:<FileText size={20}/>,label:"Conditions d'utilisation",action:()=>go("tos"),delay:"0.3s"},
+            {icon:<Lock size={20}/>,label:"Politique de confidentialité",action:()=>go("privacy"),delay:"0.35s"},
+            ...(userRole==="admin"||userRole==="owner"?[{icon:<Settings size={20}/>,label:"Panel Admin",action:()=>go("admin"),delay:"0.4s"}]:[]),
           ].map((item,i)=>(
             <button key={i} className="slide-item" style={{display:"flex",alignItems:"center",gap:14,width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px",marginBottom:8,cursor:"pointer",color:T.text,fontSize:15,fontWeight:500,textAlign:"left",animationDelay:item.delay}} onClick={item.action}>
-              <span style={{fontSize:22}}>{item.emoji}</span>
+              <span style={{color:T.orange,display:"flex"}}>{item.icon}</span>
               <span style={{flex:1}}>{item.label}</span>
               <ChevronRight size={16} color={T.muted}/>
             </button>
