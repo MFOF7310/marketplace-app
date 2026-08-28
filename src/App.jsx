@@ -52,10 +52,18 @@ const DAYS = ["Lun 24","Mar 25","Mer 26","Jeu 27","Ven 28","Sam 29"];
 const SLOTS = ["09:00","10:00","11:00","14:00","15:00","16:00"];
 const SLOT_TAKEN = {};  // Will be loaded from DB
 
-const Placeholder = ({vendor,height=160,fontSize=32}) => (
-  <div style={{background:`linear-gradient(135deg,${vendor.color}CC,${vendor.color}44)`,height,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-    <div style={{fontSize,color:"white",fontWeight:800}}>{vendor.initials}</div>
-    <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",marginTop:4}}>Photo bientôt</div>
+const Placeholder = ({vendor,height=160,fontSize=32,title=""}) => (
+  <div style={{
+    background:`linear-gradient(135deg,${vendor?.color||"#E65100"}EE,${vendor?.color||"#E65100"}66)`,
+    height,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+    position:"relative",overflow:"hidden"
+  }}>
+    {/* Background pattern */}
+    <div style={{position:"absolute",inset:0,opacity:0.08,backgroundImage:`repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%)`,backgroundSize:"12px 12px"}}/>
+    <div style={{position:"relative",textAlign:"center"}}>
+      <div style={{fontSize,color:"white",fontWeight:800,letterSpacing:-1,textShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>{vendor?.initials||"?"}</div>
+      {title&&<div style={{fontSize:10,color:"rgba(255,255,255,0.8)",marginTop:4,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>}
+    </div>
   </div>
 );
 
@@ -360,8 +368,8 @@ export default function App() {
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
         <div style={{position:"relative",cursor:"pointer"}} onClick={()=>go("product",p.id)}>
           {p.image_url
-            ? <img src={p.image_url} alt={p.title} style={{width:"100%",height:130,objectFit:"cover"}}/>
-            : <Placeholder vendor={v||{initials:"?",color:"#999"}} height={130} fontSize={28}/>
+            ? <img src={p.image_url} alt={p.title} style={{width:"100%",height:130,objectFit:"cover"}} loading="lazy"/>
+            : <Placeholder vendor={v||{initials:"?",color:"#E65100"}} height={130} fontSize={28} title={p.title}/>
           }
           <button style={{position:"absolute",top:8,right:8,background:"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:isFav?"#E53935":T.muted}} onClick={e=>{e.stopPropagation();toggleFav(p.id);}}>
             <Heart size={15} fill={isFav?"#E53935":"none"}/>
@@ -420,7 +428,10 @@ export default function App() {
             const v=getProductVendor(p);
             return (
               <div key={p.id} style={{flexShrink:0,width:160,background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",cursor:"pointer"}} onClick={()=>go("product",p.id)}>
-                <Placeholder vendor={v} height={110} fontSize={24}/>
+                {p.image_url
+                  ?<img src={p.image_url} alt={p.title} style={{width:"100%",height:110,objectFit:"cover"}} loading="lazy"/>
+                  :<Placeholder vendor={v||{initials:"?",color:"#E65100"}} height={110} fontSize={24} title={p.title}/>
+                }
                 <div style={{padding:"8px 10px"}}>
                   <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.3}}>{p.title}</div>
                   <div style={{fontSize:14,fontWeight:800,color:T.orange}}>{money(p.price)}</div>
@@ -443,8 +454,12 @@ export default function App() {
         <div style={{display:"flex",overflowX:"auto",gap:10,paddingLeft:12,paddingRight:12,scrollbarWidth:"none"}}>
           {vendors.map(v=>(
             <div key={v.id} style={{flexShrink:0,width:120,background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",cursor:"pointer",textAlign:"center"}} onClick={()=>go("vendor",v.id)}>
-              <div style={{background:`linear-gradient(135deg,${v.color}CC,${v.color}44)`,height:75,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <div style={{width:48,height:48,borderRadius:"50%",background:v.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:17,border:"3px solid rgba(255,255,255,0.4)"}}>{v.initials}</div>
+              <div style={{background:`linear-gradient(135deg,${v.color}CC,${v.color}44)`,height:75,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden"}}>
+                <div style={{position:"absolute",inset:0,opacity:0.06,backgroundImage:`repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%)`,backgroundSize:"10px 10px"}}/>
+                {v.logo_url
+                  ?<img src={v.logo_url} alt={v.name} style={{width:48,height:48,borderRadius:"50%",objectFit:"cover",border:"3px solid rgba(255,255,255,0.6)"}} loading="lazy"/>
+                  :<div style={{width:48,height:48,borderRadius:"50%",background:v.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:17,border:"3px solid rgba(255,255,255,0.4)",position:"relative"}}>{v.initials||v.name?.[0]}</div>
+                }
               </div>
               <div style={{padding:"8px 8px 10px"}}>
                 <div style={{fontSize:11,fontWeight:700,color:T.text,marginBottom:3}}>{v.name}</div>
