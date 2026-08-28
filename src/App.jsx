@@ -1427,7 +1427,7 @@ export default function App() {
   const Current = screens[screen]||HomeScreen;
 
   return (
-    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter','Segoe UI',sans-serif",width:"100%",position:"relative"}}>
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter','Segoe UI',sans-serif",width:"100%",maxWidth:600,margin:"0 auto",position:"relative",boxShadow:"0 0 40px rgba(0,0,0,0.1)"}}>
       <style>{`
         * { box-sizing: border-box; }
         html { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
