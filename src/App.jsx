@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase, SITE_URL } from './supabase.js'
+import { getVendors, getProducts, getUserRole, getVendorByUserId, createProduct, deleteProduct, updateOrderStatus, getOrdersByVendor, getAppointmentsByVendor, uploadImage } from './api.js'
 
-import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter } from "lucide-react";
+import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame } from "lucide-react";
 
 const LIGHT = { bg:"#F5F5F5",card:"#FFFFFF",border:"#E0E0E0",text:"#1A1A1A",sub:"#757575",orange:"#E65100",indigoBg:"#FFF3E0",green:"#2E7D32",greenBg:"#E8F5E9",muted:"#9E9E9E",headerTop:"#E65100",navBg:"#FFFFFF",sectionBg:"#FFFFFF",tag:"#F5F5F5" };
 const DARK  = { bg:"#121212",card:"#1E1E1E",border:"#2C2C2C",text:"#F0F0F0",sub:"#9E9E9E",orange:"#FF7043",indigoBg:"#2C1810",green:"#66BB6A",greenBg:"#1B5E2033",muted:"#616161",headerTop:"#BF360C",navBg:"#1A1A1A",sectionBg:"#1E1E1E",tag:"#2A2A2A" };
@@ -53,13 +54,42 @@ export default function App() {
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const [dark,setDark] = useState(prefersDark);
   const [user,setUser] = useState(null);
+  const [userRole,setUserRole] = useState('buyer');
+  const [vendors,setVendors] = useState([]);
+  const [products,setProducts] = useState([]);
+  const [myVendor,setMyVendor] = useState(null);
+  const [loading,setLoading] = useState(true);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [v, p] = await Promise.all([getVendors(), getProducts()]);
+      setVendors(v || []);
+      setProducts(p || []);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const loadUserData = async (u) => {
+    if(!u) { setUserRole('buyer'); setMyVendor(null); return; }
+    try {
+      const [role, vendor] = await Promise.all([getUserRole(u.id), getVendorByUserId(u.id)]);
+      setUserRole(role || 'buyer');
+      setMyVendor(vendor || null);
+    } catch(e) { console.error(e); }
+  };
 
   useEffect(() => {
+    loadData();
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+      const u = session?.user ?? null;
+      setUser(u);
+      loadUserData(u);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const u = session?.user ?? null;
+      setUser(u);
+      loadUserData(u);
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -93,8 +123,8 @@ export default function App() {
   const [favorites,setFavorites] = useState([]);
 
   const go = (s,id=null) => { setScreen(s); setScreenId(id); setMenuOpen(false); setBookDay(null); setBookSlot(null); window.scrollTo(0,0); };
-  const findP = id => [...PRODUCTS,...sellerProducts].find(p=>p.id===id);
-  const findV = id => VENDORS.find(v=>v.id===id);
+  const findP = id => products.find(p=>p.id===id) || sellerProducts.find(p=>p.id===id);
+  const findV = id => vendors.find(v=>v.id===id);
   const addCart = pid => setCart(prev => { const ex=prev.find(i=>i.pid===pid); return ex?prev.map(i=>i.pid===pid?{...i,qty:i.qty+1}:i):[...prev,{pid,qty:1}]; });
   const updQty = (pid,d) => setCart(prev=>prev.map(i=>i.pid===pid?{...i,qty:i.qty+d}:i).filter(i=>i.qty>0));
   const remCart = pid => setCart(prev=>prev.filter(i=>i.pid!==pid));
@@ -103,7 +133,12 @@ export default function App() {
   const subtotal = cart.reduce((s,i)=>s+(findP(i.pid)?.price||0)*i.qty,0);
   const delivFee = ZONES.find(z=>z.id===zone)?.fee||0;
   const total = subtotal+(cart.length?delivFee:0);
-  const filtered = PRODUCTS.filter(p=>(category==="all"||p.category===category)&&(p.title.toLowerCase().includes(search.toLowerCase())||findV(p.vendorId)?.name.toLowerCase().includes(search.toLowerCase())));
+  const filtered = products.filter(p=>{
+    const v = vendors.find(v=>v.id===p.vendor_id);
+    const catMatch = category==="all" || p.category===category;
+    const searchMatch = p.title.toLowerCase().includes(search.toLowerCase()) || v?.name?.toLowerCase().includes(search.toLowerCase());
+    return catMatch && searchMatch;
+  });
 
   const CallModal = () => {
     if(!callModal) return null;
@@ -132,18 +167,28 @@ export default function App() {
   const LoginModal = () => {
     if(!loginModal) return null;
     return (
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setLoginModal(false)}>
-        <div style={{background:T.card,borderRadius:16,padding:28,width:"100%",maxWidth:400}} onClick={e=>e.stopPropagation()}>
-          <h2 style={{color:T.text,marginBottom:8,fontSize:20}}>Se connecter</h2>
-          <p style={{color:T.sub,fontSize:14,marginBottom:24}}>Créez un compte ou connectez-vous à Woko pour faire cette action.</p>
-          <button style={{width:"100%",background:"#DB4437",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}
-            onClick={async()=>{await supabase.auth.signInWithOAuth({provider:'google',options:{redirectTo:SITE_URL}})}}>
-            <span style={{fontSize:18}}>G</span> Continuer avec Google
-          </button>
-          <button style={{width:"100%",background:"#1877F2",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
-            <span style={{fontSize:18}}>f</span> Continuer avec Facebook
-          </button>
-          <button style={{width:"100%",background:"none",border:"none",cursor:"pointer",color:T.sub,fontSize:14}} onClick={()=>setLoginModal(false)}>ANNULER</button>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setLoginModal(false)}>
+        <div style={{background:T.card,borderRadius:"20px 20px 0 0",padding:"8px 0 40px",width:"100%",maxWidth:500}} onClick={e=>e.stopPropagation()}>
+          <div style={{width:40,height:4,background:T.border,borderRadius:2,margin:"12px auto 24px"}}/>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <div style={{fontSize:36,marginBottom:4}}>🛍</div>
+            <div style={{fontSize:22,fontWeight:800,color:T.orange}}>Woko</div>
+            <div style={{fontSize:13,color:T.sub,marginTop:4}}>Le marché en ligne pour l'Afrique de l'Ouest</div>
+          </div>
+          <div style={{padding:"0 20px"}}>
+            <button style={{width:"100%",background:"#fff",color:"#1A1A1A",border:"1.5px solid #E0E0E0",borderRadius:12,padding:"13px",fontSize:15,fontWeight:600,cursor:"pointer",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",gap:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}
+              onClick={async()=>{await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:SITE_URL}})}}>
+              <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+              Continuer avec Google
+            </button>
+            <button style={{width:"100%",background:"#1877F2",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:15,fontWeight:600,cursor:"pointer",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+              Continuer avec Facebook
+            </button>
+            <div style={{textAlign:"center",fontSize:11,color:T.muted,lineHeight:1.6}}>
+              En continuant, vous acceptez nos <span style={{color:T.orange,cursor:"pointer"}} onClick={()=>{setLoginModal(false);go("tos");}}>Conditions d'utilisation</span> et notre <span style={{color:T.orange,cursor:"pointer"}} onClick={()=>{setLoginModal(false);go("privacy");}}>Politique de confidentialité</span>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -170,14 +215,20 @@ export default function App() {
         <div style={{padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
           <div style={{padding:"4px 16px 8px",color:T.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Compte</div>
           {user
-            ?<button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:"#E53935",fontSize:15}} onClick={async()=>{await supabase.auth.signOut();setMenuOpen(false);}}>
-              <span style={{color:"#E53935"}}><X size={18}/></span>Se déconnecter ({user.email?.split('@')[0]})
-            </button>
-            :<>{[{icon:<User size={18}/>,label:"Se connecter"},{icon:<Plus size={18}/>,label:"Créer compte"},{icon:<PlusCircle size={18}/>,label:"Publier une annonce"}].map((item,i)=>(
-              <button key={i} style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);setLoginModal(true);}}>
-                <span style={{color:T.orange}}>{item.icon}</span>{item.label}
+            ? <button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);go("profile");}}>
+                <span style={{color:T.orange}}><User size={18}/></span>Mon profil ({user.user_metadata?.full_name || user.email?.split("@")[0]})
               </button>
-            ))}</>
+            : <>
+                <button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);setLoginModal(true);}}>
+                  <span style={{color:T.orange}}><User size={18}/></span>Se connecter
+                </button>
+                <button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);setLoginModal(true);}}>
+                  <span style={{color:T.orange}}><Plus size={18}/></span>Créer compte
+                </button>
+                <button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:15}} onClick={()=>{setMenuOpen(false);setLoginModal(true);}}>
+                  <span style={{color:T.orange}}><PlusCircle size={18}/></span>Publier une annonce
+                </button>
+              </>
           }
         </div>
         <div style={{padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
@@ -191,9 +242,17 @@ export default function App() {
         </div>
         <div style={{padding:"8px 0"}}>
           <div style={{padding:"4px 16px 8px",color:T.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Catégories</div>
-          {CATEGORIES.filter(c=>c.id!=="all").map(cat=>(
-            <button key={cat.id} style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"11px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:14}} onClick={()=>{setCategory(cat.id);setMenuOpen(false);go("home");}}>
-              <span style={{fontSize:20}}>{cat.emoji}</span>{cat.label}
+          {[
+            {id:"mode",label:"Mode & Textile",icon:<Shirt size={17}/>},
+            {id:"elec",label:"Électronique",icon:<Smartphone size={17}/>},
+            {id:"resto",label:"Restauration",icon:<UtensilsCrossed size={17}/>},
+            {id:"beaute",label:"Beauté & Bien-être",icon:<Sparkles size={17}/>},
+            {id:"artisan",label:"Artisanat",icon:<Palette size={17}/>},
+            {id:"service",label:"Services à domicile",icon:<Wrench size={17}/>},
+          ].map(cat=>(
+            <button key={cat.id} style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"11px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:14,borderLeft:category===cat.id?`3px solid ${T.orange}`:"3px solid transparent",background:category===cat.id?T.indigoBg:"none"}} onClick={()=>{setCategory(cat.id);setMenuOpen(false);go("home");}}>
+              <span style={{color:T.orange,display:"flex",alignItems:"center"}}>{cat.icon}</span>
+              <span style={{color:category===cat.id?T.orange:T.text,fontWeight:category===cat.id?700:400}}>{cat.label}</span>
             </button>
           ))}
         </div>
@@ -214,7 +273,7 @@ export default function App() {
           <ShoppingCart size={22}/>
           {cartCount>0&&<span style={{position:"absolute",top:-2,right:-2,background:"#fff",color:T.orange,borderRadius:"50%",width:16,height:16,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800}}>{cartCount}</span>}
         </button>
-        <button style={{background:"none",border:"none",cursor:"pointer",color:"#fff",padding:4}} onClick={()=>user?go("dashboard"):setLoginModal(true)}>
+        <button style={{background:"none",border:"none",cursor:"pointer",color:"#fff",padding:4}} onClick={()=>user?go("profile"):setLoginModal(true)}>
           {user
             ?<div style={{width:28,height:28,borderRadius:"50%",background:"rgba(255,255,255,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>{user.email?.[0].toUpperCase()}</div>
             :<User size={22}/>
@@ -244,13 +303,16 @@ export default function App() {
   };
 
   const ProductCard = ({p}) => {
-    const v = findV(p.vendorId);
+    const v = findV(p.vendor_id || p.vendorId);
     const isService = p.type==="service";
     const isFav = favorites.includes(p.id);
     return (
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
         <div style={{position:"relative",cursor:"pointer"}} onClick={()=>go("product",p.id)}>
-          <Placeholder vendor={v} height={130} fontSize={28}/>
+          {p.image_url
+            ? <img src={p.image_url} alt={p.title} style={{width:"100%",height:130,objectFit:"cover"}}/>
+            : <Placeholder vendor={v||{initials:"?",color:"#999"}} height={130} fontSize={28}/>
+          }
           <button style={{position:"absolute",top:8,right:8,background:"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:isFav?"#E53935":T.muted}} onClick={e=>{e.stopPropagation();toggleFav(p.id);}}>
             <Heart size={15} fill={isFav?"#E53935":"none"}/>
           </button>
@@ -279,10 +341,18 @@ export default function App() {
     <div style={{paddingBottom:70}}>
       <div style={{background:T.card,padding:"12px 0 8px",borderBottom:`1px solid ${T.border}`}}>
         <div style={{display:"flex",overflowX:"auto",gap:0,paddingLeft:8,scrollbarWidth:"none"}}>
-          {CATEGORIES.map(cat=>(
+          {[
+            {id:"all",label:"Tout",icon:<Flame size={22}/>},
+            {id:"mode",label:"Mode",icon:<Shirt size={22}/>},
+            {id:"elec",label:"Électronique",icon:<Smartphone size={22}/>},
+            {id:"resto",label:"Resto",icon:<UtensilsCrossed size={22}/>},
+            {id:"beaute",label:"Beauté",icon:<Sparkles size={22}/>},
+            {id:"artisan",label:"Artisanat",icon:<Palette size={22}/>},
+            {id:"service",label:"Services",icon:<Wrench size={22}/>},
+          ].map(cat=>(
             <button key={cat.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"4px 12px",background:"none",border:"none",cursor:"pointer",flexShrink:0}} onClick={()=>setCategory(cat.id)}>
-              <div style={{width:52,height:52,borderRadius:"50%",background:category===cat.id?T.indigoBg:T.tag,border:`2px solid ${category===cat.id?T.orange:"transparent"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>
-                {cat.emoji}
+              <div style={{width:52,height:52,borderRadius:"50%",background:category===cat.id?T.indigoBg:T.tag,border:`2px solid ${category===cat.id?T.orange:"transparent"}`,display:"flex",alignItems:"center",justifyContent:"center",color:category===cat.id?T.orange:T.sub}}>
+                {cat.icon}
               </div>
               <span style={{fontSize:10,color:category===cat.id?T.orange:T.sub,fontWeight:category===cat.id?700:400,whiteSpace:"nowrap"}}>{cat.label}</span>
             </button>
@@ -296,7 +366,7 @@ export default function App() {
           <span style={{fontSize:13,color:T.orange,fontWeight:600}}>VOIR PLUS</span>
         </div>
         <div style={{display:"flex",overflowX:"auto",gap:10,paddingLeft:12,paddingRight:12,scrollbarWidth:"none"}}>
-          {PRODUCTS.filter(p=>p.featured).map(p=>{
+          {products.filter(p=>p.featured).map(p=>{
             const v=findV(p.vendorId);
             return (
               <div key={p.id} style={{flexShrink:0,width:160,background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",cursor:"pointer"}} onClick={()=>go("product",p.id)}>
@@ -321,7 +391,7 @@ export default function App() {
           <span style={{fontSize:13,color:T.orange,fontWeight:600}}>VOIR PLUS</span>
         </div>
         <div style={{display:"flex",overflowX:"auto",gap:10,paddingLeft:12,paddingRight:12,scrollbarWidth:"none"}}>
-          {VENDORS.map(v=>(
+          {vendors.map(v=>(
             <div key={v.id} style={{flexShrink:0,width:120,background:T.card,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",cursor:"pointer",textAlign:"center"}} onClick={()=>go("vendor",v.id)}>
               <div style={{background:`linear-gradient(135deg,${v.color}CC,${v.color}44)`,height:75,display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <div style={{width:48,height:48,borderRadius:"50%",background:v.color,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:17,border:"3px solid rgba(255,255,255,0.4)"}}>{v.initials}</div>
@@ -345,7 +415,9 @@ export default function App() {
             <Filter size={12}/>Filtrer
           </button>
         </div>
-        {filtered.length===0
+        {loading
+          ?<div style={{textAlign:"center",padding:"40px 20px",color:T.sub}}>Chargement...</div>
+          :filtered.length===0
           ?<div style={{textAlign:"center",padding:"40px 20px",color:T.sub}}>Aucune annonce dans cette catégorie.</div>
           :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{filtered.map(p=><ProductCard key={p.id} p={p}/>)}</div>
         }
@@ -570,11 +642,32 @@ export default function App() {
   };
 
   const DashboardScreen = () => {
-    const me=findV("v1");
-    const addProduct = () => {
-      if(!newP.title||!newP.price) return;
-      setSellerProducts(prev=>[...prev,{id:"sp"+Date.now(),vendorId:"v1",title:newP.title,price:Number(newP.price),type:newP.type,category:me.category,featured:false}]);
-      setNewP({title:"",price:"",type:"produit"}); setShowAdd(false);
+    const me = myVendor;
+    if(!me) return (
+      <div style={{padding:20,textAlign:"center",paddingBottom:70}}>
+        <div style={{fontSize:40,marginBottom:12}}>🏪</div>
+        <div style={{fontSize:17,fontWeight:700,color:T.text,marginBottom:8}}>Vous n'avez pas encore de boutique</div>
+        <p style={{color:T.sub,fontSize:14,marginBottom:20}}>Soumettez une demande de certification pour créer votre boutique Woko.</p>
+        <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"13px 24px",fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={()=>go("vendor-request")}>
+          Demander la certification
+        </button>
+      </div>
+    );
+    const addProduct = async () => {
+      if(!newP.title||!newP.price||!me) return;
+      try {
+        const { createProduct } = await import('./api.js');
+        const p = await createProduct({
+          vendor_id: me.id,
+          title: newP.title,
+          price: Number(newP.price),
+          type: newP.type,
+          available: true
+        });
+        setSellerProducts(prev=>[...prev, p]);
+        await loadData();
+        setNewP({title:"",price:"",type:"produit"}); setShowAdd(false);
+      } catch(e) { console.error(e); alert("Erreur: " + e.message); }
     };
     return (
       <div style={{paddingBottom:70}}>
@@ -603,7 +696,14 @@ export default function App() {
                 <div style={{width:44,height:44,borderRadius:6,background:`${me.color}33`,display:"flex",alignItems:"center",justifyContent:"center",color:me.color,fontWeight:700,flexShrink:0}}>{me.initials}</div>
                 <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{p.title}</div><div style={{fontSize:13,color:T.orange,fontWeight:700}}>{money(p.price)}</div></div>
                 <button style={{width:32,height:32,borderRadius:6,background:T.tag,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Pencil size={14} color={T.sub}/></button>
-                <button style={{width:32,height:32,borderRadius:6,background:"#FFEBEE",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setSellerProducts(prev=>prev.filter(x=>x.id!==p.id))}><Trash2 size={14} color="#E53935"/></button>
+                <button style={{width:32,height:32,borderRadius:6,background:"#FFEBEE",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={async()=>{
+                    try{
+                      const {deleteProduct}=await import('./api.js');
+                      await deleteProduct(p.id);
+                      setSellerProducts(prev=>prev.filter(x=>x.id!==p.id));
+                      await loadData();
+                    }catch(e){console.error(e);}
+                  }}><Trash2 size={14} color="#E53935"/></button>
               </div>
             ))}
             {showAdd
@@ -646,11 +746,320 @@ export default function App() {
     );
   };
 
-  const screens = {home:HomeScreen,search:SearchScreen,product:ProductScreen,vendor:VendorScreen,cart:CartScreen,booking:BookingScreen,dashboard:DashboardScreen};
+  const VendorRequestScreen = () => {
+    const [form, setForm] = useState({shop_name:"",description:"",phone:"",city:""});
+    const [idFile, setIdFile] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [done, setDone] = useState(false);
+
+    if(!user) return (
+      <div style={{padding:20,textAlign:"center"}}>
+        <div style={{fontSize:17,fontWeight:700,color:T.text,marginBottom:12}}>Connectez-vous d'abord</div>
+        <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"12px 24px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={()=>setLoginModal(true)}>Se connecter</button>
+      </div>
+    );
+
+    if(done) return (
+      <div style={{padding:"60px 20px",textAlign:"center"}}>
+        <div style={{fontSize:40,marginBottom:12}}>✅</div>
+        <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:8}}>Demande envoyée !</div>
+        <p style={{color:T.sub,fontSize:14,marginBottom:20}}>L'équipe Woko va examiner votre dossier. Vous serez notifié par email.</p>
+        <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"12px 24px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={()=>go("home")}>Retour à l'accueil</button>
+      </div>
+    );
+
+    const handleSubmit = async () => {
+      if(!form.shop_name||!form.phone||!form.city) { alert("Remplissez tous les champs obligatoires"); return; }
+      setSubmitting(true);
+      try {
+        let id_document_url = null;
+        if(idFile) {
+          id_document_url = await uploadImage(idFile);
+        }
+        const { submitVendorRequest } = await import('./api.js');
+        await submitVendorRequest({
+          user_id: user.id,
+          shop_name: form.shop_name,
+          description: form.description,
+          phone: form.phone,
+          city: form.city,
+          id_document_url
+        });
+
+        // Notify owner via Edge Function
+        try {
+          await supabase.functions.invoke('notify-vendor-request', {
+            body: {
+              shop_name: form.shop_name,
+              phone: form.phone,
+              city: form.city,
+              user_email: user.email
+            }
+          });
+        } catch(e) { console.warn("Email notification failed:", e); }
+
+        setDone(true);
+      } catch(e) { alert("Erreur: " + e.message); }
+      setSubmitting(false);
+    };
+
+    return (
+      <div style={{paddingBottom:70}}>
+        <div style={{background:T.headerTop,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+          <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer"}} onClick={()=>go("home")}><ArrowLeft size={20}/></button>
+          <span style={{color:"#fff",fontWeight:700,fontSize:17}}>Devenir vendeur certifié</span>
+        </div>
+        <div style={{padding:16}}>
+          <div style={{background:T.indigoBg,borderRadius:10,padding:14,marginBottom:16,fontSize:13,color:T.orange}}>
+            🏪 Complétez ce formulaire pour soumettre votre demande de certification. L'équipe Woko vérifiera votre identité sous 24-48h.
+          </div>
+          {[
+            {label:"Nom de la boutique *",key:"shop_name",placeholder:"Ex: Aïcha Couture"},
+            {label:"Description",key:"description",placeholder:"Décrivez votre activité..."},
+            {label:"Téléphone *",key:"phone",placeholder:"+223 70 00 00 00"},
+            {label:"Ville *",key:"city",placeholder:"Bamako, Sikasso..."},
+          ].map(field=>(
+            <div key={field.key} style={{marginBottom:12}}>
+              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:6}}>{field.label}</div>
+              <input
+                style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"11px 12px",fontSize:14,color:T.text,outline:"none",boxSizing:"border-box"}}
+                placeholder={field.placeholder}
+                value={form[field.key]}
+                onChange={e=>setForm({...form,[field.key]:e.target.value})}
+              />
+            </div>
+          ))}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:6}}>Pièce d'identité (optionnel)</div>
+            <label style={{display:"flex",alignItems:"center",gap:10,background:T.bg,border:`1px dashed ${T.border}`,borderRadius:8,padding:"12px",cursor:"pointer"}}>
+              <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>setIdFile(e.target.files?.[0]||null)}/>
+              <span style={{fontSize:22}}>📄</span>
+              <span style={{fontSize:13,color:idFile?T.green:T.sub}}>{idFile?idFile.name:"Importer votre CNI, passeport..."}</span>
+            </label>
+          </div>
+          <button
+            style={{width:"100%",background:submitting?T.muted:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"14px",fontSize:15,fontWeight:700,cursor:submitting?"not-allowed":"pointer"}}
+            onClick={handleSubmit} disabled={submitting}>
+            {submitting?"Envoi en cours...":"Soumettre ma demande"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const AdminScreen = () => {
+    const [requests, setRequests] = useState([]);
+    const [loadingReq, setLoadingReq] = useState(true);
+
+    useEffect(()=>{
+      const load = async () => {
+        try {
+          const { getPendingRequests } = await import('./api.js');
+          const data = await getPendingRequests();
+          setRequests(data||[]);
+        } catch(e){ console.error(e); }
+        setLoadingReq(false);
+      };
+      load();
+    },[]);
+
+    if(userRole !== 'admin' && userRole !== 'owner') return (
+      <div style={{padding:40,textAlign:"center",color:T.sub}}>Accès refusé</div>
+    );
+
+    const handleReview = async (id, status) => {
+      try {
+        const { reviewVendorRequest } = await import('./api.js');
+        await reviewVendorRequest(id, status, user.id);
+        setRequests(prev=>prev.filter(r=>r.id!==id));
+        await loadData();
+      } catch(e){ alert("Erreur: "+e.message); }
+    };
+
+    return (
+      <div style={{paddingBottom:70}}>
+        <div style={{background:T.headerTop,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+          <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer"}} onClick={()=>go("home")}><ArrowLeft size={20}/></button>
+          <span style={{color:"#fff",fontWeight:700,fontSize:17}}>Panel Admin</span>
+          <span style={{background:"rgba(255,255,255,0.2)",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>{userRole.toUpperCase()}</span>
+        </div>
+        <div style={{padding:16}}>
+          <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:12}}>
+            Demandes de certification ({requests.length})
+          </div>
+          {loadingReq
+            ?<div style={{textAlign:"center",padding:20,color:T.sub}}>Chargement...</div>
+            :requests.length===0
+            ?<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:20,textAlign:"center",color:T.sub}}>
+              Aucune demande en attente 🎉
+            </div>
+            :requests.map(r=>(
+              <div key={r.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:14,marginBottom:10}}>
+                <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>{r.shop_name}</div>
+                <div style={{fontSize:13,color:T.sub,marginBottom:4}}>📍 {r.city} · 📞 {r.phone}</div>
+                {r.description&&<div style={{fontSize:13,color:T.sub,marginBottom:8}}>{r.description}</div>}
+                {r.id_document_url&&(
+                  <a href={r.id_document_url} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,color:T.orange,fontSize:13,marginBottom:10}}>
+                    📄 Voir la pièce d'identité
+                  </a>
+                )}
+                <div style={{fontSize:11,color:T.muted,marginBottom:10}}>Soumis le {new Date(r.created_at).toLocaleDateString("fr-FR")}</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button style={{flex:1,background:"#E8F5E9",color:"#2E7D32",border:"none",borderRadius:8,padding:"10px",fontSize:14,fontWeight:700,cursor:"pointer"}}
+                    onClick={()=>handleReview(r.id,"approved")}>
+                    ✅ Approuver
+                  </button>
+                  <button style={{flex:1,background:"#FFEBEE",color:"#E53935",border:"none",borderRadius:8,padding:"10px",fontSize:14,fontWeight:700,cursor:"pointer"}}
+                    onClick={()=>handleReview(r.id,"rejected")}>
+                    ❌ Rejeter
+                  </button>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    );
+  };
+
+    const ProfileScreen = () => {
+    if(!user) { go("home"); return null; }
+    const [avatarUrl, setAvatarUrl] = useState(user.user_metadata?.avatar_url || null);
+    const fileRef = useState(null);
+
+    const handleAvatarChange = async (e) => {
+      const file = e.target.files?.[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => setAvatarUrl(ev.target.result);
+      reader.readAsDataURL(file);
+    };
+
+    return (
+      <div style={{paddingBottom:70,animation:"fadeIn 0.3s ease"}}>
+        <style>{`
+          @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+          @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+          .slide-item { animation: slideUp 0.3s ease both; }
+          html { scroll-behavior: smooth; }
+        `}</style>
+        <div style={{background:T.headerTop,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+          <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer"}} onClick={()=>go("home")}><ArrowLeft size={20}/></button>
+          <span style={{color:"#fff",fontWeight:700,fontSize:17}}>Mon profil</span>
+        </div>
+        <div style={{padding:16}}>
+          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:24,textAlign:"center",marginBottom:14}}>
+            {/* Avatar clickable */}
+            <label style={{cursor:"pointer",display:"inline-block",position:"relative",marginBottom:12}}>
+              <input type="file" accept="image/*" style={{display:"none"}} onChange={handleAvatarChange}/>
+              {avatarUrl
+                ? <img src={avatarUrl} alt="avatar" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover",border:`3px solid ${T.orange}`}}/>
+                : <div style={{width:80,height:80,borderRadius:"50%",background:T.orange,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:30,border:`3px solid ${T.orange}`}}>
+                    {user.email?.[0].toUpperCase()}
+                  </div>
+              }
+              <div style={{position:"absolute",bottom:0,right:0,background:T.orange,borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #fff"}}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+              </div>
+            </label>
+            <div style={{fontSize:18,fontWeight:700,color:T.text}}>{user.user_metadata?.full_name||user.email?.split("@")[0]}</div>
+            <div style={{fontSize:13,color:T.sub,marginTop:4}}>{user.email}</div>
+            <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"#E8F5E9",color:"#2E7D32",borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:600,marginTop:10}}>
+              <CheckCircle2 size={12}/> Compte vérifié Google
+            </div>
+          </div>
+          {[
+            {emoji:"🏪",label:"Mon espace vendeur",action:()=>go("dashboard"),delay:"0.1s"},
+            {emoji:"📦",label:"Mes commandes",action:()=>{},delay:"0.15s"},
+            {emoji:"❤️",label:"Mes favoris",action:()=>{},delay:"0.2s"},
+            {emoji:"🔔",label:"Notifications",action:()=>{},delay:"0.25s"},
+            {emoji:"📄",label:"Conditions d'utilisation",action:()=>go("tos"),delay:"0.3s"},
+            {emoji:"🔒",label:"Politique de confidentialité",action:()=>go("privacy"),delay:"0.35s"},
+            ...(userRole==="admin"||userRole==="owner"?[{emoji:"⚙️",label:"Panel Admin",action:()=>go("admin"),delay:"0.4s"}]:[]),
+          ].map((item,i)=>(
+            <button key={i} className="slide-item" style={{display:"flex",alignItems:"center",gap:14,width:"100%",background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px",marginBottom:8,cursor:"pointer",color:T.text,fontSize:15,fontWeight:500,textAlign:"left",animationDelay:item.delay}} onClick={item.action}>
+              <span style={{fontSize:22}}>{item.emoji}</span>
+              <span style={{flex:1}}>{item.label}</span>
+              <ChevronRight size={16} color={T.muted}/>
+            </button>
+          ))}
+          <button className="slide-item" style={{width:"100%",background:"#FFEBEE",color:"#E53935",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:"pointer",marginTop:8,animationDelay:"0.4s"}}
+            onClick={async()=>{await supabase.auth.signOut();go("home");}}>
+            Se déconnecter
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+    const TosScreen = () => (
+    <div style={{paddingBottom:70}}>
+      <div style={{background:T.headerTop,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+        <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer"}} onClick={()=>go("home")}><ArrowLeft size={20}/></button>
+        <span style={{color:"#fff",fontWeight:700,fontSize:17}}>Conditions d'utilisation</span>
+      </div>
+      <div style={{padding:"20px 16px",lineHeight:1.7}}>
+        <div style={{fontSize:13,color:T.muted,marginBottom:20}}>Dernière mise à jour : Août 2026</div>
+        {[
+          {title:"1. Acceptation des conditions",text:"En utilisant Woko, vous acceptez les présentes conditions. Si vous n'acceptez pas ces conditions, veuillez ne pas utiliser notre service."},
+          {title:"2. Description du service",text:"Woko est une marketplace en ligne permettant aux vendeurs certifiés d'Afrique de l'Ouest de proposer leurs produits et services."},
+          {title:"3. Inscription et compte",text:"Pour accéder à certaines fonctionnalités, vous devez créer un compte. Vous êtes responsable de la confidentialité de vos informations de connexion."},
+          {title:"4. Vendeurs certifiés",text:"La certification est effectuée manuellement par l'équipe Woko après vérification d'une pièce d'identité valide."},
+          {title:"5. Paiements",text:"Les paiements sont effectués via Orange Money, Wave et Moov Money. Woko n'est pas responsable des litiges entre acheteurs et vendeurs."},
+          {title:"6. Livraison",text:"Les conditions de livraison sont définies par chaque vendeur. Woko facilite la mise en relation mais n'est pas responsable des délais."},
+          {title:"7. Modifications",text:"Woko se réserve le droit de modifier ces conditions à tout moment."},
+        ].map((s,i)=>(
+          <div key={i} style={{marginBottom:20}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>{s.title}</div>
+            <div style={{fontSize:14,color:T.sub}}>{s.text}</div>
+          </div>
+        ))}
+        <div style={{fontSize:13,color:T.muted,borderTop:`1px solid ${T.border}`,paddingTop:16}}>Contact : <span style={{color:T.orange}}>support@woko.africa</span></div>
+      </div>
+    </div>
+  );
+
+  const PrivacyScreen = () => (
+    <div style={{paddingBottom:70}}>
+      <div style={{background:T.headerTop,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+        <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer"}} onClick={()=>go("home")}><ArrowLeft size={20}/></button>
+        <span style={{color:"#fff",fontWeight:700,fontSize:17}}>Politique de confidentialité</span>
+      </div>
+      <div style={{padding:"20px 16px",lineHeight:1.7}}>
+        <div style={{fontSize:13,color:T.muted,marginBottom:20}}>Dernière mise à jour : Août 2026</div>
+        {[
+          {title:"1. Données collectées",text:"Woko collecte : adresse email, nom d'affichage via Google OAuth, historique des commandes et rendez-vous."},
+          {title:"2. Utilisation des données",text:"Vos données sont utilisées pour gérer votre compte, traiter vos commandes et améliorer nos services. Nous ne vendons jamais vos données."},
+          {title:"3. Authentification Google",text:"Lorsque vous vous connectez via Google, nous recevons uniquement votre email et votre nom."},
+          {title:"4. Sécurité",text:"Vos données sont stockées de manière sécurisée via Supabase avec chiffrement en transit et au repos."},
+          {title:"5. Vos droits",text:"Vous pouvez demander l'accès, la modification ou la suppression de vos données en nous contactant."},
+          {title:"6. Cookies",text:"Woko utilise uniquement des cookies essentiels. Aucun cookie de tracking publicitaire."},
+          {title:"7. Contact",text:"Pour toute question : privacy@woko.africa"},
+        ].map((s,i)=>(
+          <div key={i} style={{marginBottom:20}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>{s.title}</div>
+            <div style={{fontSize:14,color:T.sub}}>{s.text}</div>
+          </div>
+        ))}
+        <div style={{fontSize:13,color:T.muted,borderTop:`1px solid ${T.border}`,paddingTop:16}}>Contact : <span style={{color:T.orange}}>privacy@woko.africa</span></div>
+      </div>
+    </div>
+  );
+
+    const screens = {home:HomeScreen,search:SearchScreen,product:ProductScreen,vendor:VendorScreen,cart:CartScreen,booking:BookingScreen,dashboard:DashboardScreen,profile:ProfileScreen,tos:TosScreen,privacy:PrivacyScreen,'vendor-request':VendorRequestScreen,admin:AdminScreen};
   const Current = screens[screen]||HomeScreen;
 
   return (
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Inter','Segoe UI',sans-serif",width:"100%",position:"relative"}}>
+      <style>{`
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        .screen-fade { animation: fadeIn 0.25s ease both; }
+        button { transition: opacity 0.15s, transform 0.1s; }
+        button:active { opacity: 0.75; transform: scale(0.97); }
+        ::-webkit-scrollbar { display: none; }
+      `}</style>
       <Header/>
       {menuOpen&&<SideMenu/>}
       <CallModal/>

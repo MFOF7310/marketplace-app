@@ -29,3 +29,12 @@ dist-ssr
 dist/
 node_modules/
 src/supabase.js
+# Supabase local
+supabase/.temp/
+supabase/functions/.env
+
+# VS Code
+.vscode/
+
+# Supabase config (contient des infos locales)
+supabase/config.toml
