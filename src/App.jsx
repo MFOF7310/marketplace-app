@@ -565,9 +565,100 @@ export default function App() {
     );
   };
 
+  // ── STAR RATING ──
+  const StarRating = ({rating, size=16, interactive=false, onRate=null}) => {
+    const [hover, setHover] = useState(0);
+    return (
+      <div style={{display:"flex",gap:2}}>
+        {[1,2,3,4,5].map(star=>(
+          <span key={star}
+            style={{cursor:interactive?"pointer":"default",fontSize:size,color:star<=(hover||rating)?"#FFA000":"#E0E0E0",transition:"color 0.1s"}}
+            onMouseEnter={()=>interactive&&setHover(star)}
+            onMouseLeave={()=>interactive&&setHover(0)}
+            onClick={()=>interactive&&onRate&&onRate(star)}>
+            ★
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  // ── REVIEW MODAL ──
+  const ReviewModal = ({vendorId, onClose, onSubmitted}) => {
+    const [rating, setRating] = useState(0);
+    const [comment, setComment] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+
+    if(!user) return (
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+        <div style={{background:T.card,borderRadius:16,padding:28,width:"100%",maxWidth:400,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:12}}>Connectez-vous pour laisser un avis</div>
+          <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"12px 24px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={()=>{onClose();setLoginModal(true);}}>Se connecter</button>
+        </div>
+      </div>
+    );
+
+    return (
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+        <div style={{background:T.card,borderRadius:"20px 20px 0 0",padding:"8px 0 40px",width:"100%",maxWidth:500}} onClick={e=>e.stopPropagation()}>
+          <div style={{width:40,height:4,background:T.border,borderRadius:2,margin:"12px auto 20px"}}/>
+          <div style={{padding:"0 20px"}}>
+            <div style={{fontSize:18,fontWeight:700,color:T.text,marginBottom:16,textAlign:"center"}}>Laisser un avis</div>
+            <div style={{textAlign:"center",marginBottom:20}}>
+              <StarRating rating={rating} size={40} interactive={true} onRate={setRating}/>
+              <div style={{fontSize:12,color:T.sub,marginTop:8}}>
+                {rating===0?"Touchez une étoile":rating===1?"Très mauvais":rating===2?"Mauvais":rating===3?"Correct":rating===4?"Bien":"Excellent !"}
+              </div>
+            </div>
+            <textarea
+              style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:10,padding:"12px",fontSize:14,color:T.text,outline:"none",resize:"none",boxSizing:"border-box",marginBottom:16,minHeight:80}}
+              placeholder="Partagez votre expérience (optionnel)..."
+              value={comment}
+              onChange={e=>setComment(e.target.value)}
+            />
+            <button
+              style={{width:"100%",background:rating>0?T.orange:T.muted,color:"#fff",border:"none",borderRadius:12,padding:"14px",fontSize:15,fontWeight:700,cursor:rating>0?"pointer":"not-allowed"}}
+              disabled={rating===0||submitting}
+              onClick={async()=>{
+                if(rating===0||!user) return;
+                setSubmitting(true);
+                try {
+                  const {submitReview} = await import('./api.js');
+                  await submitReview({vendor_id:vendorId,buyer_id:user.id,rating,comment:comment||null});
+                  onSubmitted();
+                  onClose();
+                } catch(e){
+                  if(e.message?.includes('one_review_per_buyer')) alert("Vous avez déjà laissé un avis pour ce vendeur.");
+                  else alert("Erreur: "+e.message);
+                }
+                setSubmitting(false);
+              }}>
+              {submitting?"Envoi...":"Publier mon avis"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const VendorScreen = () => {
     const v=findV(screenId); if(!v) return null;
     const vProducts=products.filter(p=>p.vendor_id===v.id||p.vendorId===v.id);
+    const [reviews, setReviews] = useState([]);
+    const [rating, setRating] = useState(null);
+    const [showReviewModal, setShowReviewModal] = useState(false);
+
+    useEffect(()=>{
+      const load = async () => {
+        try {
+          const {getVendorReviews, getVendorRating} = await import('./api.js');
+          const [r, rt] = await Promise.all([getVendorReviews(v.id), getVendorRating(v.id)]);
+          setReviews(r||[]);
+          setRating(rt);
+        } catch(e){console.error(e);}
+      };
+      load();
+    },[v.id]);
     return (
       <div style={{paddingBottom:70}}>
         <div style={{background:`linear-gradient(135deg,${v.color}EE,${v.color}99)`,padding:"0 0 50px",position:"relative"}}>
@@ -592,6 +683,47 @@ export default function App() {
           <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:10}}>Catalogue ({vProducts.length})</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{vProducts.map(p=><ProductCard key={p.id} p={p}/>)}</div>
         </div>
+
+        {/* Reviews section */}
+        <div style={{padding:"0 12px 20px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:700,color:T.text}}>Avis clients</div>
+              {rating?.average>0&&(
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
+                  <StarRating rating={Math.round(rating.average)} size={16}/>
+                  <span style={{fontSize:13,fontWeight:700,color:T.orange}}>{rating.average}</span>
+                  <span style={{fontSize:12,color:T.sub}}>({rating.count} avis)</span>
+                </div>
+              )}
+            </div>
+            <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:20,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}
+              onClick={()=>setShowReviewModal(true)}>
+              + Avis
+            </button>
+          </div>
+
+          {reviews.length===0
+            ?<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:16,textAlign:"center",color:T.sub,fontSize:13}}>
+              Aucun avis pour le moment. Soyez le premier !
+            </div>
+            :reviews.map(r=>(
+              <div key={r.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:12,marginBottom:8}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                  <StarRating rating={r.rating} size={14}/>
+                  <span style={{fontSize:11,color:T.muted}}>{new Date(r.created_at).toLocaleDateString("fr-FR")}</span>
+                </div>
+                {r.comment&&<div style={{fontSize:13,color:T.sub,lineHeight:1.5}}>{r.comment}</div>}
+              </div>
+            ))
+          }
+        </div>
+
+        {showReviewModal&&<ReviewModal vendorId={v.id} onClose={()=>setShowReviewModal(false)} onSubmitted={async()=>{
+          const {getVendorReviews,getVendorRating} = await import('./api.js');
+          const [r,rt] = await Promise.all([getVendorReviews(v.id),getVendorRating(v.id)]);
+          setReviews(r||[]); setRating(rt);
+        }}/>}
       </div>
     );
   };
