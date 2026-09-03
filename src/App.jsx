@@ -917,6 +917,8 @@ export default function App() {
       </div>
     );
     const v=getProductVendor(p) || {name:'Vendeur',zone:'',phone:''};
+    const [submitting, setSubmitting] = useState(false);
+
     if(confirmed) return (
       <div style={{padding:"60px 20px",textAlign:"center"}}>
         <div style={{width:64,height:64,borderRadius:"50%",background:"#E8F5E9",color:"#2E7D32",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><CheckCircle2 size={32}/></div>
@@ -951,11 +953,35 @@ export default function App() {
             </div>
           </>}
           <button style={{width:"100%",background:bookDay&&bookSlot?T.orange:T.muted,color:"#fff",border:"none",borderRadius:10,padding:14,fontSize:16,fontWeight:700,cursor:bookDay&&bookSlot?"pointer":"not-allowed"}}
-            onClick={()=>{
-              if(!bookDay||!bookSlot) return;
-              setConfirmed(true);
+            onClick={async()=>{
+              if(!bookDay||!bookSlot||submitting) return;
+              if(!user) { setLoginModal(true); return; }
+              setSubmitting(true);
+              try {
+                const {createAppointment} = await import('./api.js');
+                const parts = bookDay.split('/');
+                const dateStr = parts.length===3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : bookDay;
+                await createAppointment({
+                  vendor_id: v?.id,
+                  product_id: p.id,
+                  buyer_id: user.id,
+                  buyer_name: user.user_metadata?.full_name||user.email?.split('@')[0],
+                  buyer_phone: '',
+                  appointment_date: dateStr,
+                  appointment_time: bookSlot+':00',
+                  status: 'pending'
+                });
+                setConfirmed(true);
+              } catch(e) {
+                if(e.message?.includes('one_pending_appt')||e.message?.includes('unique')) {
+                  alert("Vous avez déjà un rendez-vous en attente avec ce vendeur.");
+                } else {
+                  alert("Erreur: "+e.message);
+                }
+              }
+              setSubmitting(false);
             }}>
-            {bookDay&&bookSlot?"Confirmer le rendez-vous":"Sélectionnez date et créneau"}
+            {submitting?"Confirmation en cours...":bookDay&&bookSlot?"Confirmer le rendez-vous":"Sélectionnez date et créneau"}
           </button>
         </div>
       </div>
@@ -1299,13 +1325,41 @@ export default function App() {
                 }
               </div>
             ))}
-            <div style={{fontSize:14,fontWeight:700,color:T.text,margin:"16px 0 10px",display:"flex",alignItems:"center",gap:6}}><CalendarDays size={15} color={T.orange}/>Rendez-vous</div>
-            {appts.map(a=>(
-              <div key={a.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:12,marginBottom:8,display:"flex",alignItems:"center",gap:10}}>
-                <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{a.service}</div><div style={{fontSize:13,color:T.sub}}>{a.client}</div></div>
-                <div style={{background:T.indigoBg,color:T.orange,borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:700}}>{a.date} · {a.heure}</div>
-              </div>
-            ))}
+            <div style={{fontSize:14,fontWeight:700,color:T.text,margin:"16px 0 10px",display:"flex",alignItems:"center",gap:6}}><CalendarDays size={15} color={T.orange}/>Rendez-vous ({appts.length})</div>
+            {appts.length===0
+              ?<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:16,textAlign:"center",color:T.sub,fontSize:13}}>Aucun rendez-vous pour le moment</div>
+              :appts.map(a=>(
+                <div key={a.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:12,marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:600,color:T.text}}>{a.buyer_name}</div>
+                      <div style={{fontSize:12,color:T.sub}}>{a.appointment_date} à {a.appointment_time?.slice(0,5)}</div>
+                    </div>
+                    <span style={{
+                      background:a.status==="confirmed"?"#E8F5E9":a.status==="cancelled"?"#FFEBEE":"#FFF3E0",
+                      color:a.status==="confirmed"?"#2E7D32":a.status==="cancelled"?"#E53935":"#E65100",
+                      borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:700
+                    }}>
+                      {a.status==="confirmed"?"✅ Confirmé":a.status==="cancelled"?"❌ Annulé":"⏳ En attente"}
+                    </span>
+                  </div>
+                  {a.status==="pending"&&(
+                    <div style={{display:"flex",gap:8,marginTop:8}}>
+                      <button style={{flex:1,background:"#E8F5E9",color:"#2E7D32",border:"none",borderRadius:8,padding:"7px",fontSize:12,fontWeight:700,cursor:"pointer"}}
+                        onClick={async()=>{
+                          await supabase.from('appointments').update({status:'confirmed'}).eq('id',a.id);
+                          setAppts(prev=>prev.map(x=>x.id===a.id?{...x,status:'confirmed'}:x));
+                        }}>✅ Confirmer</button>
+                      <button style={{flex:1,background:"#FFEBEE",color:"#E53935",border:"none",borderRadius:8,padding:"7px",fontSize:12,fontWeight:700,cursor:"pointer"}}
+                        onClick={async()=>{
+                          await supabase.from('appointments').update({status:'cancelled'}).eq('id',a.id);
+                          setAppts(prev=>prev.map(x=>x.id===a.id?{...x,status:'cancelled'}:x));
+                        }}>❌ Annuler</button>
+                    </div>
+                  )}
+                </div>
+              ))
+            }
           </>}
 
           {sellerTab==="analytics"&&<AnalyticsTab vendorId={me.id} T={T} money={money}/>}
