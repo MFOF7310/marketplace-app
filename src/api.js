@@ -260,3 +260,41 @@ export const getAllVendorsAdmin = async () => {
   if (error) throw error
   return data
 }
+
+// ── REVIEWS ──
+export const getVendorReviews = async (vendorId) => {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('vendor_id', vendorId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export const getVendorRating = async (vendorId) => {
+  const { data, error } = await supabase.rpc('get_vendor_rating', { v_id: vendorId })
+  if (error) throw error
+  return data
+}
+
+export const submitReview = async (review) => {
+  const { data, error } = await supabase
+    .from('reviews')
+    .upsert(review, { onConflict: 'vendor_id,buyer_id' })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export const getUserReview = async (vendorId, userId) => {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('vendor_id', vendorId)
+    .eq('buyer_id', userId)
+    .single()
+  if (error && error.code !== 'PGRST116') throw error
+  return data
+}
