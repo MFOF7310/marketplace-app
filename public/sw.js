@@ -1,4 +1,4 @@
-const CACHE = 'woko-v1';
+const CACHE = 'woko-v2';
 const STATIC = [
   '/market/',
   '/market/index.html',

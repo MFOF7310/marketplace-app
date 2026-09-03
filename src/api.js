@@ -102,6 +102,25 @@ export const createOrder = async (order) => {
     .select()
     .single()
   if (error) throw error
+
+  // Decrement quantity if product has stock tracking
+  if (order.product_id && order.quantity) {
+    const { data: product } = await supabase
+      .from('products')
+      .select('quantity, available')
+      .eq('id', order.product_id)
+      .single()
+
+    if (product?.quantity !== null && product?.quantity !== undefined) {
+      const newQty = Math.max(0, product.quantity - (order.quantity || 1))
+      await supabase
+        .from('products')
+        .update({ quantity: newQty })
+        .eq('id', order.product_id)
+      // Trigger auto_stock_check will handle available=false when qty=0
+    }
+  }
+
   return data
 }
 
@@ -298,4 +317,47 @@ export const getUserReview = async (vendorId, userId) => {
     .single()
   if (error && error.code !== 'PGRST116') throw error
   return data
+}
+
+// ── ANALYTICS ──
+export const trackVendorView = async (vendorId, viewerId = null) => {
+  try {
+    await supabase.from('vendor_views').insert({
+      vendor_id: vendorId,
+      viewer_id: viewerId || null
+    })
+  } catch(e) { /* silent fail */ }
+}
+
+export const getVendorAnalytics = async (vendorId) => {
+  const { data, error } = await supabase.rpc('get_vendor_analytics', { v_id: vendorId })
+  if (error) throw error
+  return data
+}
+
+// ── FAVORITES ──
+export const getFavorites = async (userId) => {
+  const { data, error } = await supabase
+    .from('favorites')
+    .select('product_id')
+    .eq('user_id', userId)
+  if (error) throw error
+  return (data || []).map(f => f.product_id)
+}
+
+export const toggleFavorite = async (userId, productId) => {
+  const { data } = await supabase
+    .from('favorites')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('product_id', productId)
+    .single()
+
+  if (data) {
+    await supabase.from('favorites').delete().eq('id', data.id)
+    return false
+  } else {
+    await supabase.from('favorites').insert({ user_id: userId, product_id: productId })
+    return true
+  }
 }
