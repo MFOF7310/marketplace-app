@@ -11,7 +11,7 @@ if('serviceWorker' in navigator) {
 import { supabase, SITE_URL } from './supabase.js'
 import { getVendors, getProducts, getUserRole, getVendorByUserId, createProduct, deleteProduct, updateOrderStatus, getOrdersByVendor, getAppointmentsByVendor, uploadImage } from './api.js'
 
-import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame, Bell, Settings, Lock, FileText, Camera } from "lucide-react";
+import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame, Bell, Settings, Lock, FileText, Camera, Eye, TrendingUp } from "lucide-react";
 
 const LIGHT = { bg:"#F5F5F5",card:"#FFFFFF",border:"#E0E0E0",text:"#1A1A1A",sub:"#757575",orange:"#E65100",indigoBg:"#FFF3E0",green:"#2E7D32",greenBg:"#E8F5E9",muted:"#9E9E9E",headerTop:"#E65100",navBg:"#FFFFFF",sectionBg:"#FFFFFF",tag:"#F5F5F5" };
 const DARK  = { bg:"#121212",card:"#1E1E1E",border:"#2C2C2C",text:"#F0F0F0",sub:"#9E9E9E",orange:"#FF7043",indigoBg:"#2C1810",green:"#66BB6A",greenBg:"#1B5E2033",muted:"#616161",headerTop:"#BF360C",navBg:"#1A1A1A",sectionBg:"#1E1E1E",tag:"#2A2A2A" };
@@ -108,6 +108,12 @@ export default function App() {
         setOrders(vOrders || []);
         setAppts(vAppts || []);
       }
+      // Load favorites
+      if(u) {
+        const {getFavorites} = await import('./api.js');
+        const favIds = await getFavorites(u.id);
+        setFavorites(favIds || []);
+      }
     } catch(e) { console.error("loadUserData error:", e); }
   };
 
@@ -196,7 +202,19 @@ export default function App() {
   const addCart = pid => setCart(prev => { const ex=prev.find(i=>i.pid===pid); return ex?prev.map(i=>i.pid===pid?{...i,qty:i.qty+1}:i):[...prev,{pid,qty:1}]; });
   const updQty = (pid,d) => setCart(prev=>prev.map(i=>i.pid===pid?{...i,qty:i.qty+d}:i).filter(i=>i.qty>0));
   const remCart = pid => setCart(prev=>prev.filter(i=>i.pid!==pid));
-  const toggleFav = id => setFavorites(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
+  const toggleFav = async (id) => {
+    if(!user) { setLoginModal(true); return; }
+    // Optimistic update
+    setFavorites(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
+    try {
+      const {toggleFavorite} = await import('./api.js');
+      await toggleFavorite(user.id, id);
+    } catch(e) {
+      // Revert on error
+      setFavorites(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
+      console.error(e);
+    }
+  };
   const cartCount = cart.reduce((s,i)=>s+i.qty,0);
   const subtotal = cart.reduce((s,i)=>s+(findP(i.pid)?.price||0)*i.qty,0);
   const delivFee = ZONES.find(z=>z.id===zone)?.fee||0;
@@ -662,10 +680,12 @@ export default function App() {
     useEffect(()=>{
       const load = async () => {
         try {
-          const {getVendorReviews, getVendorRating} = await import('./api.js');
+          const {getVendorReviews, getVendorRating, trackVendorView} = await import('./api.js');
           const [r, rt] = await Promise.all([getVendorReviews(v.id), getVendorRating(v.id)]);
           setReviews(r||[]);
           setRating(rt);
+          // Track view (silent)
+          trackVendorView(v.id, user?.id || null);
         } catch(e){console.error(e);}
       };
       load();
@@ -942,6 +962,65 @@ export default function App() {
     );
   };
 
+  const AnalyticsTab = ({vendorId, T, money}) => {
+    const [analytics, setAnalytics] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(()=>{
+      const load = async () => {
+        try {
+          const {getVendorAnalytics} = await import('./api.js');
+          const data = await getVendorAnalytics(vendorId);
+          setAnalytics(data);
+        } catch(e){console.error(e);}
+        setLoading(false);
+      };
+      load();
+    },[vendorId]);
+
+    if(loading) return <div style={{padding:40,textAlign:"center",color:T.sub}}>Chargement...</div>;
+    if(!analytics) return <div style={{padding:40,textAlign:"center",color:T.sub}}>Données indisponibles</div>;
+
+    const StatBox = ({icon,label,value,sub,color}) => (
+      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 12px",flex:1,minWidth:0}}>
+        <div style={{fontSize:20,marginBottom:6}}>{icon}</div>
+        <div style={{fontSize:22,fontWeight:800,color:color||T.orange}}>{value}</div>
+        <div style={{fontSize:11,fontWeight:600,color:T.text,marginBottom:2}}>{label}</div>
+        {sub&&<div style={{fontSize:10,color:T.muted}}>{sub}</div>}
+      </div>
+    );
+
+    return (
+      <div style={{animation:"fadeIn 0.3s ease"}}>
+        {/* Views */}
+        <div style={{fontSize:13,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Visibilité</div>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          <StatBox icon={<Eye size={18} color={T.orange}/>} label="Vues totales" value={analytics.total_views||0} sub="depuis le début"/>
+          <StatBox icon={<TrendingUp size={18} color="#1565C0}"/>} label="Vues 7 jours" value={analytics.views_7d||0} color="#1565C0" sub="cette semaine"/>
+        </div>
+
+        {/* RDV & Orders */}
+        <div style={{fontSize:13,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Activité</div>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          <StatBox icon={<CalendarDays size={18} color="#2E7D32"/>} label="Total RDV" value={analytics.total_rdv||0} color="#2E7D32" sub={`${analytics.pending_rdv||0} en attente`}/>
+          <StatBox icon={<ShoppingCart size={18} color="#AD1457"/>} label="Commandes" value={analytics.total_orders||0} color="#AD1457"/>
+        </div>
+
+        {/* Revenue & Rating */}
+        <div style={{fontSize:13,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Performance</div>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          <StatBox icon={<span style={{fontSize:18}}>💰</span>} label="Revenus" value={money(analytics.total_revenue||0)} sub="commandes confirmées"/>
+          <StatBox icon={<Star size={18} color="#FFA000" fill="#FFA000"/>} label="Note moyenne" value={analytics.avg_rating||"—"} color="#FFA000" sub={`${analytics.total_reviews||0} avis`}/>
+        </div>
+
+        {/* Tips */}
+        <div style={{background:T.indigoBg,borderRadius:10,padding:14,fontSize:13,color:T.orange}}>
+          💡 <strong>Conseil :</strong> Ajoutez des photos à vos produits pour augmenter vos vues de 3x en moyenne.
+        </div>
+      </div>
+    );
+  };
+
   const EditVendorForm = ({vendor, onSave}) => {
     const [form, setForm] = useState({
       name: vendor.name||"",
@@ -1080,9 +1159,13 @@ export default function App() {
           </div>
         )}
         <div style={{display:"flex",background:T.card,borderBottom:`1px solid ${T.border}`,marginBottom:8}}>
-          {["catalogue","commandes"].map(tab=>(
-            <button key={tab} style={{flex:1,padding:"13px",background:"none",border:"none",borderBottom:`3px solid ${sellerTab===tab?T.orange:"transparent"}`,cursor:"pointer",fontSize:14,fontWeight:600,color:sellerTab===tab?T.orange:T.sub}} onClick={()=>setSellerTab(tab)}>
-              {tab==="catalogue"?"Mon catalogue":"Commandes & RDV"}
+          {[
+            {id:"catalogue",label:"Catalogue"},
+            {id:"commandes",label:"Commandes"},
+            {id:"analytics",label:"📊 Stats"},
+          ].map(tab=>(
+            <button key={tab.id} style={{flex:1,padding:"12px 4px",background:"none",border:"none",borderBottom:`3px solid ${sellerTab===tab.id?T.orange:"transparent"}`,cursor:"pointer",fontSize:13,fontWeight:600,color:sellerTab===tab.id?T.orange:T.sub,whiteSpace:"nowrap"}} onClick={()=>setSellerTab(tab.id)}>
+              {tab.label}
             </button>
           ))}
         </div>
@@ -1224,6 +1307,8 @@ export default function App() {
               </div>
             ))}
           </>}
+
+          {sellerTab==="analytics"&&<AnalyticsTab vendorId={me.id} T={T} money={money}/>}
         </div>
       </div>
     );
@@ -1613,7 +1698,7 @@ export default function App() {
           {[
             {icon:<Store size={20}/>,label:"Mon espace vendeur",action:()=>go("dashboard"),delay:"0.1s"},
             {icon:<ShoppingCart size={20}/>,label:"Mes commandes",action:()=>{},delay:"0.15s"},
-            {icon:<Heart size={20}/>,label:"Mes favoris",action:()=>{},delay:"0.2s"},
+            {icon:<Heart size={20}/>,label:"Mes favoris",action:()=>go("favorites"),delay:"0.2s"},
             {icon:<Bell size={20}/>,label:"Notifications",action:()=>{},delay:"0.25s"},
             {icon:<FileText size={20}/>,label:"Conditions d'utilisation",action:()=>go("tos"),delay:"0.3s"},
             {icon:<Lock size={20}/>,label:"Politique de confidentialité",action:()=>go("privacy"),delay:"0.35s"},
@@ -1688,7 +1773,32 @@ export default function App() {
     </div>
   );
 
-    const screens = {home:HomeScreen,search:SearchScreen,product:ProductScreen,vendor:VendorScreen,cart:CartScreen,booking:BookingScreen,dashboard:DashboardScreen,profile:ProfileScreen,tos:TosScreen,privacy:PrivacyScreen,'vendor-request':VendorRequestScreen,admin:AdminScreen};
+    const FavoritesScreen = () => {
+    const favProducts = products.filter(p => favorites.includes(p.id));
+    return (
+      <div style={{paddingBottom:70}}>
+        <div style={{background:T.headerTop,padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+          <button style={{background:"none",border:"none",color:"#fff",cursor:"pointer"}} onClick={()=>go("profile")}><ArrowLeft size={20}/></button>
+          <span style={{color:"#fff",fontWeight:700,fontSize:17}}>Mes favoris ({favorites.length})</span>
+        </div>
+        <div style={{padding:"12px 10px"}}>
+          {favProducts.length===0
+            ?<div style={{textAlign:"center",padding:"60px 20px"}}>
+              <Heart size={48} color={T.border} style={{margin:"0 auto 16px",display:"block"}}/>
+              <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:8}}>Aucun favori</div>
+              <div style={{fontSize:13,color:T.sub,marginBottom:20}}>Appuyez sur ❤️ sur un produit pour l'ajouter ici.</div>
+              <button style={{background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"12px 24px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={()=>go("home")}>Explorer le marché</button>
+            </div>
+            :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {favProducts.map(p=><ProductCard key={p.id} p={p}/>)}
+            </div>
+          }
+        </div>
+      </div>
+    );
+  };
+
+  const screens = {home:HomeScreen,search:SearchScreen,product:ProductScreen,vendor:VendorScreen,cart:CartScreen,booking:BookingScreen,dashboard:DashboardScreen,profile:ProfileScreen,tos:TosScreen,privacy:PrivacyScreen,'vendor-request':VendorRequestScreen,admin:AdminScreen,favorites:FavoritesScreen};
   const Current = screens[screen]||HomeScreen;
 
   return (

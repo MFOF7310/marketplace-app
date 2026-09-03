@@ -318,3 +318,46 @@ export const getUserReview = async (vendorId, userId) => {
   if (error && error.code !== 'PGRST116') throw error
   return data
 }
+
+// ── ANALYTICS ──
+export const trackVendorView = async (vendorId, viewerId = null) => {
+  try {
+    await supabase.from('vendor_views').insert({
+      vendor_id: vendorId,
+      viewer_id: viewerId || null
+    })
+  } catch(e) { /* silent fail */ }
+}
+
+export const getVendorAnalytics = async (vendorId) => {
+  const { data, error } = await supabase.rpc('get_vendor_analytics', { v_id: vendorId })
+  if (error) throw error
+  return data
+}
+
+// ── FAVORITES ──
+export const getFavorites = async (userId) => {
+  const { data, error } = await supabase
+    .from('favorites')
+    .select('product_id')
+    .eq('user_id', userId)
+  if (error) throw error
+  return (data || []).map(f => f.product_id)
+}
+
+export const toggleFavorite = async (userId, productId) => {
+  const { data } = await supabase
+    .from('favorites')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('product_id', productId)
+    .single()
+
+  if (data) {
+    await supabase.from('favorites').delete().eq('id', data.id)
+    return false
+  } else {
+    await supabase.from('favorites').insert({ user_id: userId, product_id: productId })
+    return true
+  }
+}
