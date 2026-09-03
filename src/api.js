@@ -56,8 +56,9 @@ export const updateVendor = async (id, updates) => {
 }
 
 // ── PRODUCTS ──
-export const getProducts = async (vendorId = null) => {
-  let query = supabase.from('products').select('*, vendors(*)').eq('available', true)
+export const getProducts = async (vendorId = null, showAll = false) => {
+  let query = supabase.from('products').select('*, vendors(*)')
+  if (!showAll) query = query.eq('available', true)
   if (vendorId) query = query.eq('vendor_id', vendorId)
   const { data, error } = await query.order('created_at', { ascending: false })
   if (error) throw error

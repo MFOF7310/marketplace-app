@@ -385,8 +385,15 @@ export default function App() {
           <button style={{position:"absolute",top:8,right:8,background:"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:isFav?"#E53935":T.muted}} onClick={e=>{e.stopPropagation();toggleFav(p.id);}}>
             <Heart size={15} fill={isFav?"#E53935":"none"}/>
           </button>
-          <div style={{position:"absolute",top:8,left:8,background:isService?"#1565C0":T.orange,color:"#fff",borderRadius:4,padding:"2px 7px",fontSize:10,fontWeight:700}}>
-            {isService?"SERVICE":"PRODUIT"}
+          <div style={{position:"absolute",top:8,left:8,display:"flex",gap:4}}>
+            <div style={{background:isService?"#1565C0":T.orange,color:"#fff",borderRadius:4,padding:"2px 7px",fontSize:10,fontWeight:700}}>
+              {isService?"SERVICE":"PRODUIT"}
+            </div>
+            {p.available===false&&(
+              <div style={{background:"#757575",color:"#fff",borderRadius:4,padding:"2px 7px",fontSize:10,fontWeight:700}}>
+                HORS STOCK
+              </div>
+            )}
           </div>
         </div>
         <div style={{padding:"10px 10px 4px",cursor:"pointer"}} onClick={()=>go("product",p.id)}>
@@ -398,8 +405,11 @@ export default function App() {
           <button style={{flex:1,padding:"9px 8px",background:"none",border:"none",borderRight:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.orange,fontSize:13,fontWeight:600}} onClick={()=>setCallModal(p.vendor_id||p.vendorId)}>
             <Phone size={14}/> Appeler
           </button>
-          <button style={{flex:1,padding:"9px 8px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.sub,fontSize:13}} onClick={()=>{isService?go("booking",p.id):addCart(p.id);}}>
-            <MessageCircle size={14}/> {isService?"RDV":"Panier"}
+          <button
+            disabled={p.available===false}
+            style={{flex:1,padding:"9px 8px",background:"none",border:"none",cursor:p.available===false?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:p.available===false?T.muted:T.sub,fontSize:13}}
+            onClick={()=>{if(p.available===false)return; isService?go("booking",p.id):addCart(p.id);}}>
+            <MessageCircle size={14}/> {p.available===false?"Indisponible":isService?"RDV":"Panier"}
           </button>
         </div>
       </div>
@@ -1068,16 +1078,17 @@ export default function App() {
             {sellerProducts.map(p=>(
               <div key={p.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:12,marginBottom:8,display:"flex",alignItems:"center",gap:10}}>
                 <div style={{width:44,height:44,borderRadius:6,background:`${me.color}33`,display:"flex",alignItems:"center",justifyContent:"center",color:me.color,fontWeight:700,flexShrink:0}}>{me.initials}</div>
-                <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:T.text}}>{p.title}</div><div style={{fontSize:13,color:T.orange,fontWeight:700}}>{money(p.price)}</div></div>
-                <button style={{width:32,height:32,borderRadius:6,background:T.tag,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Pencil size={14} color={T.sub}/></button>
-                <button style={{width:32,height:32,borderRadius:6,background:"#FFEBEE",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={async()=>{
-                    try{
-                      const {deleteProduct}=await import('./api.js');
-                      await deleteProduct(p.id);
-                      setSellerProducts(prev=>prev.filter(x=>x.id!==p.id));
-                      await loadData();
-                    }catch(e){console.error(e);}
-                  }}><Trash2 size={14} color="#E53935"/></button>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:14,fontWeight:600,color:T.text}}>{p.title}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:13,color:T.orange,fontWeight:700}}>{money(p.price)}</span>
+                    {p.quantity!=null&&<span style={{fontSize:11,color:T.sub}}>Qté: {p.quantity}</span>}
+                  </div>
+                </div>
+                <button style={{background:p.available===false?"#FFEBEE":"#E8F5E9",color:p.available===false?"#E53935":"#2E7D32",border:"none",borderRadius:20,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}} onClick={async()=>{const newAvail=p.available===false?true:false;await supabase.from('products').update({available:newAvail}).eq('id',p.id);setSellerProducts(prev=>prev.map(x=>x.id===p.id?{...x,available:newAvail}:x));await loadData();}}>
+                  {p.available===false?"Hors stock":"En stock"}
+                </button>
+                <button style={{width:28,height:28,borderRadius:6,background:"#FFEBEE",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={async()=>{await supabase.from('products').update({available:false}).eq('id',p.id);setSellerProducts(prev=>prev.filter(x=>x.id!==p.id));await loadData();}}><Trash2 size={13} color="#E53935"/></button>
               </div>
             ))}
             {showAdd
