@@ -11,7 +11,7 @@ if('serviceWorker' in navigator) {
 import { supabase, SITE_URL } from './supabase.js'
 import { getVendors, getProducts, getUserRole, getVendorByUserId, createProduct, deleteProduct, updateOrderStatus, getOrdersByVendor, getAppointmentsByVendor, uploadImage } from './api.js'
 
-import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame, Bell, Settings, Lock, FileText } from "lucide-react";
+import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame, Bell, Settings, Lock, FileText, Camera } from "lucide-react";
 
 const LIGHT = { bg:"#F5F5F5",card:"#FFFFFF",border:"#E0E0E0",text:"#1A1A1A",sub:"#757575",orange:"#E65100",indigoBg:"#FFF3E0",green:"#2E7D32",greenBg:"#E8F5E9",muted:"#9E9E9E",headerTop:"#E65100",navBg:"#FFFFFF",sectionBg:"#FFFFFF",tag:"#F5F5F5" };
 const DARK  = { bg:"#121212",card:"#1E1E1E",border:"#2C2C2C",text:"#F0F0F0",sub:"#9E9E9E",orange:"#FF7043",indigoBg:"#2C1810",green:"#66BB6A",greenBg:"#1B5E2033",muted:"#616161",headerTop:"#BF360C",navBg:"#1A1A1A",sectionBg:"#1E1E1E",tag:"#2A2A2A" };
@@ -100,7 +100,7 @@ export default function App() {
       setMyVendor(vendor || null);
       if(vendor) {
         const [vProducts, vOrders, vAppts] = await Promise.all([
-          getProducts(vendor.id),
+          getProducts(vendor.id, true),
           getOrdersByVendor(vendor.id),
           getAppointmentsByVendor(vendor.id)
         ]);
@@ -143,6 +143,7 @@ export default function App() {
   const [sellerTab,setSellerTab] = useState("catalogue");
   const [showAdd,setShowAdd] = useState(false);
   const [showEditVendor,setShowEditVendor] = useState(false);
+  const [stockFilter,setStockFilter] = useState('all');
   const [newP,setNewP] = useState({title:"",price:"",type:"produit",imageFile:null,uploading:false});
   const [orders,setOrders] = useState([]);
   const [appts,setAppts] = useState([]);
@@ -1027,12 +1028,24 @@ export default function App() {
           price: Number(newP.price),
           type: newP.type,
           image_url,
-          available: true
+          available: true,
+          quantity: newP.quantity||null
         });
-        setSellerProducts(prev=>[...prev, p]);
-        await loadData();
-        setNewP({title:"",price:"",type:"produit",imageFile:null,uploading:false});
+        // Show immediately without waiting for DB reload
+        // Ensure all fields are present for immediate display
+        const newProduct = {
+          ...p,
+          image_url: p.image_url || null,
+          vendor_id: me.id,
+          vendors: me,
+          available: true,
+          quantity: newP.quantity||null
+        };
+        setSellerProducts(prev=>[...prev, newProduct]);
+        setNewP({title:"",price:"",type:"produit",imageFile:null,uploading:false,quantity:null,preview:null});
         setShowAdd(false);
+        // Reload in background
+        loadData();
       } catch(e) { console.error(e); alert("Erreur: " + e.message); setNewP(p=>({...p,uploading:false})); }
     };
     return (
@@ -1075,22 +1088,77 @@ export default function App() {
         </div>
         <div style={{padding:"0 12px"}}>
           {sellerTab==="catalogue"?<>
-            {sellerProducts.map(p=>(
-              <div key={p.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:12,marginBottom:8,display:"flex",alignItems:"center",gap:10}}>
-                <div style={{width:44,height:44,borderRadius:6,background:`${me.color}33`,display:"flex",alignItems:"center",justifyContent:"center",color:me.color,fontWeight:700,flexShrink:0}}>{me.initials}</div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:14,fontWeight:600,color:T.text}}>{p.title}</div>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:13,color:T.orange,fontWeight:700}}>{money(p.price)}</span>
-                    {p.quantity!=null&&<span style={{fontSize:11,color:T.sub}}>Qté: {p.quantity}</span>}
+            {sellerProducts.filter(p=>stockFilter==='all'||(stockFilter==='available'&&p.available!==false)||(stockFilter==='unavailable'&&p.available===false)).map(p=>(
+              <div key={p.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden",opacity:p.available===false?0.7:1}}>
+                {/* Mini card image */}
+                <div style={{position:"relative",height:100,background:`linear-gradient(135deg,${me.color||T.orange}CC,${me.color||T.orange}44)`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {p.image_url
+                    ?<img src={p.image_url} alt={p.title} style={{width:"100%",height:100,objectFit:"cover"}}/>
+                    :<span style={{fontSize:32,color:"#fff",fontWeight:800}}>{me.initials||me.name?.[0]}</span>
+                  }
+                  <div style={{position:"absolute",top:6,left:6,background:p.type==="service"?"#1565C0":T.orange,color:"#fff",borderRadius:4,padding:"2px 7px",fontSize:9,fontWeight:700}}>
+                    {p.type==="service"?"SERVICE":"PRODUIT"}
+                  </div>
+                  {p.available===false&&(
+                    <div style={{position:"absolute",top:6,right:6,background:"#757575",color:"#fff",borderRadius:4,padding:"2px 7px",fontSize:9,fontWeight:700}}>HORS STOCK</div>
+                  )}
+                </div>
+                {/* Card content */}
+                <div style={{padding:"10px 12px"}}>
+                  <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}}>{p.title}</div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                    <span style={{fontSize:16,fontWeight:800,color:T.orange}}>{money(p.price)}</span>
+                    {p.quantity!=null&&<span style={{fontSize:11,color:T.sub,background:T.tag,borderRadius:10,padding:"2px 8px"}}>Qté: {p.quantity}</span>}
+                  </div>
+                  {/* Action buttons */}
+                  <div style={{display:"flex",gap:6}}>
+                    <button
+                      style={{flex:1,background:p.available===false?"#E8F5E9":"#FFEBEE",color:p.available===false?"#2E7D32":"#E53935",border:"none",borderRadius:8,padding:"7px",fontSize:12,fontWeight:700,cursor:"pointer"}}
+                      onClick={async()=>{
+                        const newAvail=p.available===false?true:false;
+                        const {error}=await supabase.from('products').update({available:newAvail}).eq('id',p.id);
+                        if(!error) setSellerProducts(prev=>prev.map(x=>x.id===p.id?{...x,available:newAvail}:x));
+                      }}>
+                      {p.available===false?"→ Remettre en stock":"→ Hors stock"}
+                    </button>
+                    <button style={{width:34,height:34,borderRadius:8,background:"#FFEBEE",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                      onClick={async()=>{
+                        if(!window.confirm("Supprimer ce produit ?")) return;
+                        await supabase.from('products').delete().eq('id',p.id);
+                        setSellerProducts(prev=>prev.filter(x=>x.id!==p.id));
+                        await loadData();
+                      }}>
+                      <Trash2 size={14} color="#E53935"/>
+                    </button>
+                  </div>
+                  {/* Quantity editor */}
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"6px 0",borderTop:`1px solid ${T.border}`}}>
+                    <span style={{fontSize:11,color:T.sub}}>Quantité:</span>
+                    <input type="number" min="0" defaultValue={p.quantity??''} placeholder="Illimitée"
+                      style={{flex:1,background:T.bg,border:`1px solid ${T.border}`,borderRadius:6,padding:"4px 8px",fontSize:12,color:T.text,outline:"none"}}
+                      onBlur={async e=>{
+                        const qty=e.target.value===''?null:parseInt(e.target.value);
+                        await supabase.from('products').update({quantity:qty}).eq('id',p.id);
+                        setSellerProducts(prev=>prev.map(x=>x.id===p.id?{...x,quantity:qty}:x));
+                      }}
+                    />
                   </div>
                 </div>
-                <button style={{background:p.available===false?"#FFEBEE":"#E8F5E9",color:p.available===false?"#E53935":"#2E7D32",border:"none",borderRadius:20,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}} onClick={async()=>{const newAvail=p.available===false?true:false;await supabase.from('products').update({available:newAvail}).eq('id',p.id);setSellerProducts(prev=>prev.map(x=>x.id===p.id?{...x,available:newAvail}:x));await loadData();}}>
-                  {p.available===false?"Hors stock":"En stock"}
-                </button>
-                <button style={{width:28,height:28,borderRadius:6,background:"#FFEBEE",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={async()=>{await supabase.from('products').update({available:false}).eq('id',p.id);setSellerProducts(prev=>prev.filter(x=>x.id!==p.id));await loadData();}}><Trash2 size={13} color="#E53935"/></button>
               </div>
             ))}
+            {/* Stock filter tabs */}
+            <div style={{display:"flex",background:T.tag,borderRadius:20,padding:3,gap:2,marginBottom:12}}>
+              {[
+                {id:"all",label:"Tous"},
+                {id:"available",label:"En stock"},
+                {id:"unavailable",label:"Hors stock"},
+              ].map(f=>(
+                <button key={f.id} style={{flex:1,background:stockFilter===f.id?T.card:"transparent",color:stockFilter===f.id?T.orange:T.sub,border:"none",borderRadius:16,padding:"6px 8px",fontWeight:600,fontSize:12,cursor:"pointer"}} onClick={()=>setStockFilter(f.id)}>
+                  {f.label} ({f.id==="all"?sellerProducts.length:f.id==="available"?sellerProducts.filter(p=>p.available!==false).length:sellerProducts.filter(p=>p.available===false).length})
+                </button>
+              ))}
+            </div>
+
             {showAdd
               ?<div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:14,marginBottom:8}}>
                 <input style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontSize:14,color:T.text,outline:"none",marginBottom:8,boxSizing:"border-box"}} placeholder="Titre du produit / service" defaultValue={newP.title} onBlur={e=>setNewP(p=>({...p,title:e.target.value}))}/>
@@ -1098,13 +1166,43 @@ export default function App() {
                 <div style={{display:"flex",gap:8,marginBottom:8}}>
                   {["produit","service"].map(t=><button key={t} style={{flex:1,background:newP.type===t?T.orange:T.tag,color:newP.type===t?"#fff":T.text,border:"none",borderRadius:8,padding:"10px",fontSize:14,fontWeight:600,cursor:"pointer"}} onClick={()=>setNewP({...newP,type:t})}>{t}</button>)}
                 </div>
-                <label style={{display:"flex",alignItems:"center",gap:10,background:T.bg,border:`1px dashed ${T.border}`,borderRadius:8,padding:"11px 12px",cursor:"pointer",marginBottom:12}}>
-                  <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>setNewP({...newP,imageFile:e.target.files?.[0]||null})}/>
-                  {newP.imageFile
-                    ?<><span style={{fontSize:18}}>🖼</span><span style={{fontSize:13,color:T.green,fontWeight:600}}>{newP.imageFile.name}</span></>
-                    :<><span style={{fontSize:18}}>📷</span><span style={{fontSize:13,color:T.sub}}>Ajouter une photo (optionnel)</span></>
-                  }
-                </label>
+                {/* Image preview */}
+                {newP.preview&&(
+                  <div style={{marginBottom:8,borderRadius:8,overflow:"hidden",height:120,position:"relative",animation:"fadeIn 0.3s ease"}}>
+                    <img src={newP.preview} style={{width:"100%",height:120,objectFit:"cover",transition:"opacity 0.3s"}}/>
+                    <button style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.5)",border:"none",borderRadius:"50%",width:24,height:24,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+                      onClick={()=>setNewP(p=>({...p,imageFile:null,preview:null}))}>
+                      <X size={12}/>
+                    </button>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  id="product-photo-input"
+                  style={{display:"none"}}
+                  onChange={e=>{
+                    const file = e.target.files?.[0]||null;
+                    if(file) {
+                      const reader = new FileReader();
+                      reader.onload = ev => setNewP(p=>({...p,imageFile:file,preview:ev.target.result}));
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+                <div style={{display:"flex",gap:8,marginBottom:12}}>
+                  <button type="button" style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:T.bg,border:`1px dashed ${T.border}`,borderRadius:8,padding:"11px 12px",cursor:"pointer",color:newP.imageFile?T.green:T.sub,fontSize:13,fontWeight:newP.imageFile?600:400}}
+                    onClick={()=>document.getElementById('product-photo-input').click()}>
+                    <Camera size={16} color={newP.imageFile?T.green:T.sub}/>
+                    {newP.imageFile?"Photo sélectionnée ✓":"Ajouter une photo"}
+                  </button>
+                  {newP.imageFile&&(
+                    <button type="button" style={{width:44,background:"#FFEBEE",border:"none",borderRadius:8,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+                      onClick={()=>setNewP(p=>({...p,imageFile:null,preview:null}))}>
+                      <X size={14} color="#E53935"/>
+                    </button>
+                  )}
+                </div>
                 {newP.uploading&&<div style={{fontSize:12,color:T.orange,marginBottom:8,textAlign:"center"}}>Upload en cours...</div>}
                 <div style={{display:"flex",gap:8}}>
                   <button style={{flex:1,background:T.orange,color:"#fff",border:"none",borderRadius:8,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={addProduct}>Enregistrer</button>
