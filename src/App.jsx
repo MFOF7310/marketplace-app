@@ -1176,26 +1176,18 @@ export default function App() {
                     </button>
                   </div>
                 )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  id="product-photo-input"
-                  style={{display:"none"}}
-                  onChange={e=>{
-                    const file = e.target.files?.[0]||null;
-                    if(file) {
-                      const reader = new FileReader();
-                      reader.onload = ev => setNewP(p=>({...p,imageFile:file,preview:ev.target.result}));
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                />
                 <div style={{display:"flex",gap:8,marginBottom:12}}>
-                  <button type="button" style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:T.bg,border:`1px dashed ${T.border}`,borderRadius:8,padding:"11px 12px",cursor:"pointer",color:newP.imageFile?T.green:T.sub,fontSize:13,fontWeight:newP.imageFile?600:400}}
-                    onClick={()=>document.getElementById('product-photo-input').click()}>
+                  <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:T.bg,border:`1px dashed ${newP.imageFile?T.green:T.border}`,borderRadius:8,padding:"11px 12px",cursor:"pointer",color:newP.imageFile?T.green:T.sub,fontSize:13,fontWeight:newP.imageFile?600:400}}>
+                    <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
+                      const file = e.target.files?.[0];
+                      if(!file) return;
+                      const reader = new FileReader();
+                      reader.onloadend = () => setNewP(p=>({...p,imageFile:file,preview:reader.result}));
+                      reader.readAsDataURL(file);
+                    }}/>
                     <Camera size={16} color={newP.imageFile?T.green:T.sub}/>
                     {newP.imageFile?"Photo sélectionnée ✓":"Ajouter une photo"}
-                  </button>
+                  </label>
                   {newP.imageFile&&(
                     <button type="button" style={{width:44,background:"#FFEBEE",border:"none",borderRadius:8,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
                       onClick={()=>setNewP(p=>({...p,imageFile:null,preview:null}))}>

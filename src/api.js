@@ -102,6 +102,25 @@ export const createOrder = async (order) => {
     .select()
     .single()
   if (error) throw error
+
+  // Decrement quantity if product has stock tracking
+  if (order.product_id && order.quantity) {
+    const { data: product } = await supabase
+      .from('products')
+      .select('quantity, available')
+      .eq('id', order.product_id)
+      .single()
+
+    if (product?.quantity !== null && product?.quantity !== undefined) {
+      const newQty = Math.max(0, product.quantity - (order.quantity || 1))
+      await supabase
+        .from('products')
+        .update({ quantity: newQty })
+        .eq('id', order.product_id)
+      // Trigger auto_stock_check will handle available=false when qty=0
+    }
+  }
+
   return data
 }
 
