@@ -20,6 +20,7 @@ import { PrivacyScreen } from './screens/PrivacyScreen.jsx';
 import { FavoritesScreen } from './screens/FavoritesScreen.jsx';
 import { MyAppointmentsScreen } from './screens/MyAppointmentsScreen.jsx';
 import { VendorRequestScreen } from './screens/VendorRequestScreen.jsx';
+import { AboutScreen } from './screens/AboutScreen.jsx';
 
 const SCREENS = {
   home: HomeScreen,
@@ -36,6 +37,7 @@ const SCREENS = {
   favorites: FavoritesScreen,
   'my-appointments': MyAppointmentsScreen,
   'vendor-request': VendorRequestScreen,
+  'about': AboutScreen,
 };
 
 export default function App() {

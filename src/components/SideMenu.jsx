@@ -59,7 +59,11 @@ export const SideMenu = () => {
 
         <div style={{padding:"8px 0"}}>
           <div style={{padding:"4px 16px 8px",color:T.muted,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Catégories</div>
-          {CATS.map(cat=>(
+          <button style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"11px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:14,borderBottom:`1px solid ${T.border}`}} onClick={()=>{setMenuOpen(false);go("about");}}>
+            <span style={{color:T.orange}}>ℹ️</span> À propos de Woko
+          </button>
+
+        {CATS.map(cat=>(
             <button key={cat.id} style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"11px 16px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:14}} onClick={()=>{setMenuOpen(false);go("home");}}>
               <span style={{color:T.orange,display:"flex",alignItems:"center"}}>{cat.icon}</span>{cat.label}
             </button>
