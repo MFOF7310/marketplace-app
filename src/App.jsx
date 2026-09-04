@@ -116,11 +116,6 @@ export default function App() {
       }
       // Load notifications for vendor
       if(vendor) {
-        const {data: pendingRdv} = await supabase
-          .from('appointments')
-          .select('id', {count:'exact',head:true})
-          .eq('vendor_id', vendor.id)
-          .eq('status', 'pending');
         const {count: rdvCount} = await supabase
           .from('appointments')
           .select('*', {count:'exact',head:true})
@@ -439,7 +434,12 @@ export default function App() {
         <div style={{padding:"10px 10px 4px",cursor:"pointer"}} onClick={()=>go("product",p.id)}>
           <div style={{fontSize:13,fontWeight:600,color:T.text,lineHeight:1.3,marginBottom:4}}>{p.title}</div>
           <div style={{fontSize:15,fontWeight:800,color:T.orange,marginBottom:4}}>{money(p.price)}</div>
-          <div style={{fontSize:11,color:T.sub,display:"flex",alignItems:"center",gap:4,marginBottom:8}}><MapPin size={10}/>{v.zone}</div>
+          <div style={{fontSize:11,color:T.sub,display:"flex",alignItems:"center",gap:4,marginBottom:8}}><MapPin size={10}/>{v?.zone||v?.city||""}</div>
+          {p.quantity!==null&&p.quantity!==undefined&&(
+            <span style={{fontSize:10,fontWeight:700,color:p.quantity===0?"#E53935":p.quantity<=5?"#E65100":"#2E7D32",background:p.quantity===0?"#FFEBEE":p.quantity<=5?"#FFF3E0":"#E8F5E9",borderRadius:10,padding:"2px 7px"}}>
+              {p.quantity===0?"Épuisé":p.quantity<=5?`${p.quantity} restants`:"∞"}
+            </span>
+          )}
         </div>
         <div style={{display:"flex",borderTop:`1px solid ${T.border}`}}>
           <button style={{flex:1,padding:"9px 8px",background:"none",border:"none",borderRight:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.orange,fontSize:13,fontWeight:600}} onClick={()=>setCallModal(p.vendor_id||p.vendorId)}>
@@ -726,13 +726,20 @@ export default function App() {
             :<Placeholder vendor={v||{initials:"?",color:"#E65100"}} height={200} fontSize={48}/>
           }
           <button style={{position:"absolute",top:12,left:12,background:"rgba(0,0,0,0.5)",border:"none",borderRadius:"50%",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff",zIndex:10}} onClick={()=>go("home")}><ArrowLeft size={18}/></button>
-          <button style={{position:"absolute",top:12,right:12,background:"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:isFav?"#E53935":T.muted}} onClick={()=>toggleFav(p.id)}><Heart size={18} fill={isFav?"#E53935":"none"}/></button>
+          <button style={{position:"absolute",top:12,right:12,background:"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:favorites.includes(p.id)?"#E53935":T.muted}} onClick={()=>toggleFav(p.id)}><Heart size={18} fill={favorites.includes(p.id)?"#E53935":"none"}/></button>
           <div style={{position:"absolute",bottom:12,left:12,background:isService?"#1565C0":T.orange,color:"#fff",borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:700}}>{isService?"SERVICE":"PRODUIT"}</div>
         </div>
         <div style={{padding:"16px 14px",background:T.card,marginBottom:8}}>
           <div style={{fontSize:20,fontWeight:700,color:T.text,marginBottom:6}}>{p.title}</div>
           <div style={{fontSize:24,fontWeight:800,color:T.orange,marginBottom:8}}>{money(p.price)}</div>
-          <div style={{fontSize:13,color:T.sub,display:"flex",alignItems:"center",gap:6}}><MapPin size={13}/>{v.zone}</div>
+          <div style={{fontSize:13,color:T.sub,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            <span style={{display:"flex",alignItems:"center",gap:4}}><MapPin size={13}/>{v?.zone||v?.city||""}</span>
+            {p&&p.quantity!==null&&p.quantity!==undefined&&(
+              <span style={{fontSize:11,fontWeight:700,color:p.quantity===0?"#E53935":p.quantity<=5?"#E65100":"#2E7D32",background:p.quantity===0?"#FFEBEE":p.quantity<=5?"#FFF3E0":"#E8F5E9",borderRadius:10,padding:"3px 10px"}}>
+                {p.quantity===0?"Épuisé":p.quantity<=5?`${p.quantity} restants`:"En stock ∞"}
+              </span>
+            )}
+          </div>
         </div>
         <div style={{background:T.card,padding:"14px",marginBottom:8,cursor:"pointer"}} onClick={()=>v&&go("vendor",v.id)}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
