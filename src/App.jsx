@@ -11,7 +11,7 @@ if('serviceWorker' in navigator) {
 import { supabase, SITE_URL } from './supabase.js'
 import { getVendors, getProducts, getUserRole, getVendorByUserId, createProduct, deleteProduct, updateOrderStatus, getOrdersByVendor, getAppointmentsByVendor, uploadImage } from './api.js'
 
-import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame, Bell, Settings, Lock, FileText, Camera, Eye, TrendingUp } from "lucide-react";
+import { Search, ShoppingCart, CalendarDays, CheckCircle2, Plus, Minus, Trash2, Clock, ArrowLeft, BadgeCheck, Pencil, ClipboardList, Sun, Moon, Store, ChevronRight, Phone, MessageCircle, X, Menu, Home, Grid, PlusCircle, User, Heart, MapPin, Star, Filter, Shirt, Smartphone, UtensilsCrossed, Sparkles, Palette, Wrench, Flame, Bell, Settings, Lock, FileText, Camera, Eye, TrendingUp, Share2 } from "lucide-react";
 
 const LIGHT = { bg:"#F5F5F5",card:"#FFFFFF",border:"#E0E0E0",text:"#1A1A1A",sub:"#757575",orange:"#E65100",indigoBg:"#FFF3E0",green:"#2E7D32",greenBg:"#E8F5E9",muted:"#9E9E9E",headerTop:"#E65100",navBg:"#FFFFFF",sectionBg:"#FFFFFF",tag:"#F5F5F5" };
 const DARK  = { bg:"#121212",card:"#1E1E1E",border:"#2C2C2C",text:"#F0F0F0",sub:"#9E9E9E",orange:"#FF7043",indigoBg:"#2C1810",green:"#66BB6A",greenBg:"#1B5E2033",muted:"#616161",headerTop:"#BF360C",navBg:"#1A1A1A",sectionBg:"#1E1E1E",tag:"#2A2A2A" };
@@ -126,6 +126,15 @@ export default function App() {
     } catch(e) { console.error("loadUserData error:", e); }
   };
 
+  // Handle deep links (#product/id)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if(hash.startsWith('#product/')) {
+      const id = hash.replace('#product/', '');
+      if(id) { setScreen('product'); setScreenId(id); }
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -229,6 +238,29 @@ export default function App() {
     window.scrollTo({top:0,behavior:'smooth'});
     sessionStorage.setItem('woko-screen', s);
     sessionStorage.setItem('woko-screen-id', id||'');
+  };
+
+  const shareProduct = async (p, v) => {
+    const url = `${window.location.origin}/market/#product/${p.id}`;
+    const text = `🛍 ${p.title} — ${money(p.price)}\nVendeur: ${v?.name||''}\n`;
+    if(navigator.share) {
+      try {
+        await navigator.share({ title: p.title, text, url });
+      } catch(e) { if(e.name !== 'AbortError') copyToClipboard(url); }
+    } else {
+      copyToClipboard(url);
+    }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(()=>{
+      // Show toast
+      const toast = document.createElement('div');
+      toast.textContent = '🔗 Lien copié !';
+      toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1A1A1A;color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:600;z-index:9999;animation:fadeIn 0.3s ease';
+      document.body.appendChild(toast);
+      setTimeout(()=>document.body.removeChild(toast), 2000);
+    });
   };
   const findP = id => {
     if(!id) return null;
@@ -499,6 +531,9 @@ export default function App() {
         <div style={{display:"flex",borderTop:`1px solid ${T.border}`}}>
           <button style={{flex:1,padding:"9px 8px",background:"none",border:"none",borderRight:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.orange,fontSize:13,fontWeight:600}} onClick={()=>setCallModal(p.vendor_id||p.vendorId)}>
             <Phone size={14}/> Appeler
+          </button>
+          <button style={{width:36,padding:"9px 4px",background:"none",border:"none",borderRight:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>shareProduct(p,v)}>
+            <Share2 size={13} color={T.muted}/>
           </button>
           <button
             disabled={p.available===false}
@@ -809,6 +844,7 @@ export default function App() {
         </div>
         <div style={{padding:"0 14px 14px",display:"flex",gap:10,background:T.card}}>
           <button style={{flex:1,background:T.orange,color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>setCallModal(p.vendor_id||p.vendorId)}><Phone size={16}/>Appeler</button>
+          <button style={{width:44,background:T.tag,border:`1px solid ${T.border}`,borderRadius:10,padding:"13px 10px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>shareProduct(p,v)}><Share2 size={18} color={T.orange}/></button>
           {isService
             ?<button style={{flex:1,background:"#1565C0",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>go("booking",p.id)}><CalendarDays size={16}/>Réserver</button>
             :<button style={{flex:1,background:added?"#2E7D32":T.indigoBg,color:added?"#fff":T.orange,border:`1px solid ${T.orange}`,borderRadius:10,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{addCart(p.id);setAdded(true);setTimeout(()=>setAdded(false),1500);}}>
