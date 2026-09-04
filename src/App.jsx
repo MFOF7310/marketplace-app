@@ -140,6 +140,61 @@ export default function App() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // ── SUPABASE REALTIME ──
+  useEffect(() => {
+    // Products changes (stock, availability)
+    const productsChannel = supabase
+      .channel('products-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+        if(payload.eventType === 'UPDATE') {
+          setProducts(prev => prev.map(p => p.id === payload.new.id ? {...p, ...payload.new} : p));
+          setSellerProducts(prev => prev.map(p => p.id === payload.new.id ? {...p, ...payload.new} : p));
+        }
+        if(payload.eventType === 'INSERT') {
+          loadData();
+        }
+        if(payload.eventType === 'DELETE') {
+          setProducts(prev => prev.filter(p => p.id !== payload.old.id));
+          setSellerProducts(prev => prev.filter(p => p.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    // Appointments changes (new RDV → notif badge)
+    const apptsChannel = supabase
+      .channel('appointments-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' }, (payload) => {
+        if(myVendor && payload.new.vendor_id === myVendor.id) {
+          setNotifCount(prev => prev + 1);
+          setAppts(prev => [...prev, payload.new]);
+        }
+        if(user && payload.new.buyer_id === user.id) {
+          // Update buyer's appointments in real time
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'appointments' }, (payload) => {
+        setAppts(prev => prev.map(a => a.id === payload.new.id ? {...a, ...payload.new} : a));
+      })
+      .subscribe();
+
+    // Vendors changes (logo, info updates)
+    const vendorsChannel = supabase
+      .channel('vendors-changes')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'vendors' }, (payload) => {
+        setVendors(prev => prev.map(v => v.id === payload.new.id ? {...v, ...payload.new, color: getVendorColor(payload.new), initials: payload.new.initials || payload.new.name?.[0]?.toUpperCase() || '?'} : v));
+        if(myVendor && myVendor.id === payload.new.id) {
+          setMyVendor(prev => ({...prev, ...payload.new}));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(productsChannel);
+      supabase.removeChannel(apptsChannel);
+      supabase.removeChannel(vendorsChannel);
+    };
+  }, [myVendor?.id, user?.id]);
   const T = dark ? DARK : LIGHT;
   const [screen,setScreen] = useState(()=>sessionStorage.getItem('woko-screen')||"home");
   const [screenId,setScreenId] = useState(()=>sessionStorage.getItem('woko-screen-id')||null);
