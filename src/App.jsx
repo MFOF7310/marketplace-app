@@ -114,6 +114,20 @@ export default function App() {
         const favIds = await getFavorites(u.id);
         setFavorites(favIds || []);
       }
+      // Load notifications for vendor
+      if(vendor) {
+        const {data: pendingRdv} = await supabase
+          .from('appointments')
+          .select('id', {count:'exact',head:true})
+          .eq('vendor_id', vendor.id)
+          .eq('status', 'pending');
+        const {count: rdvCount} = await supabase
+          .from('appointments')
+          .select('*', {count:'exact',head:true})
+          .eq('vendor_id', vendor.id)
+          .eq('status', 'pending');
+        setNotifCount(rdvCount || 0);
+      }
     } catch(e) { console.error("loadUserData error:", e); }
   };
 
@@ -150,6 +164,7 @@ export default function App() {
   const [showAdd,setShowAdd] = useState(false);
   const [showEditVendor,setShowEditVendor] = useState(false);
   const [stockFilter,setStockFilter] = useState('all');
+  const [notifCount,setNotifCount] = useState(0);
   const [newP,setNewP] = useState({title:"",price:"",type:"produit",imageFile:null,uploading:false});
   const [orders,setOrders] = useState([]);
   const [appts,setAppts] = useState([]);
@@ -361,11 +376,17 @@ export default function App() {
           <ShoppingCart size={22}/>
           {cartCount>0&&<span style={{position:"absolute",top:-2,right:-2,background:"#fff",color:T.orange,borderRadius:"50%",width:16,height:16,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800}}>{cartCount}</span>}
         </button>
-        <button style={{background:"none",border:"none",cursor:"pointer",color:"#fff",padding:4}} onClick={()=>user?go("profile"):setLoginModal(true)}>
+        <button style={{background:"none",border:"none",cursor:"pointer",color:"#fff",padding:4,position:"relative"}} onClick={()=>user?go("profile"):setLoginModal(true)}>
           {user
-            ?<div style={{width:28,height:28,borderRadius:"50%",background:"rgba(255,255,255,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>{user.email?.[0].toUpperCase()}</div>
+            ?<div style={{width:28,height:28,borderRadius:"50%",background:"rgba(255,255,255,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>
+              {user.user_metadata?.avatar_url
+                ?<img src={user.user_metadata.avatar_url} style={{width:28,height:28,borderRadius:"50%",objectFit:"cover"}}/>
+                :user.email?.[0].toUpperCase()
+              }
+            </div>
             :<User size={22}/>
           }
+          {notifCount>0&&<span style={{position:"absolute",top:-2,right:-2,background:"#E53935",color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800}}>{notifCount>9?"9+":notifCount}</span>}
         </button>
       </div>
     </div>
@@ -1333,7 +1354,7 @@ export default function App() {
             {id:"commandes",label:"Commandes"},
             {id:"analytics",label:"📊 Stats"},
           ].map(tab=>(
-            <button key={tab.id} style={{flex:1,padding:"12px 4px",background:"none",border:"none",borderBottom:`3px solid ${sellerTab===tab.id?T.orange:"transparent"}`,cursor:"pointer",fontSize:13,fontWeight:600,color:sellerTab===tab.id?T.orange:T.sub,whiteSpace:"nowrap"}} onClick={()=>setSellerTab(tab.id)}>
+            <button key={tab.id} style={{flex:1,padding:"12px 4px",background:"none",border:"none",borderBottom:`3px solid ${sellerTab===tab.id?T.orange:"transparent"}`,cursor:"pointer",fontSize:13,fontWeight:600,color:sellerTab===tab.id?T.orange:T.sub,whiteSpace:"nowrap"}} onClick={()=>{setSellerTab(tab.id);if(tab.id==='commandes')setNotifCount(0);}}>
               {tab.label}
             </button>
           ))}
